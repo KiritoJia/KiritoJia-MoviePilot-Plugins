@@ -1,0 +1,9 @@
+.DS_Store
+**/.DS_Store
+**/__pycache__/
+*.py[cod]
+**/.pytest_cache/
+**/.coverage
+**/frontend/node_modules/
+**/frontend/package-lock.json
+*.zip
