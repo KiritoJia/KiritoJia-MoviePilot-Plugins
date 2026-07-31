@@ -3,12 +3,14 @@
     "name": "字幕下载助手",
     "description": "自动刮削媒体库影片字幕，支持常见视频格式及 STRM 格式。",
     "labels": "字幕,自动化,STRM",
-    "version": "1.1.0",
+    "version": "1.1.1",
     "icon": "https://raw.githubusercontent.com/KiritoJia/SubtitleDownloadAssistant/main/icons/SubtitleDownloadAssistant.png",
     "author": "Kirito",
     "level": 1,
+    "release": true,
     "v2": true,
     "history": {
+      "v1.1.1": "启用 MoviePilot Release ZIP 安装，避免 GitHub 逐文件下载在代理网络下超时",
       "v1.1.0": "新增 1-4 个可配置并发任务，默认 2 个；同一目标串行，来源共享请求锁并按接口限流，降低高频请求风险",
       "v1.0.1": "按来源拆分 STRM 查询：射手增强 Range 兼容，迅雷直接使用文件名，并修正来源失败日志",
       "v1.0.0": "独立正式版：目录增量监控、五类字幕源、STRM 指纹、任务工作台和终态任务一键清理"

@@ -30,7 +30,7 @@ package.json                          插件仓库元数据
 https://github.com/KiritoJia/SubtitleDownloadAssistant
 ```
 
-添加后可在插件市场安装“字幕下载助手”。仓库根目录的 `package.json` 会提供版本信息；后续发布新版本后可直接在 MoviePilot 中更新。
+添加后可在插件市场安装“字幕下载助手”。仓库根目录的 `package.json` 会提供版本信息；在线安装和更新使用 MoviePilot 规范的 Release ZIP，避免逐文件下载。
 
 [GitHub Releases](https://github.com/KiritoJia/SubtitleDownloadAssistant/releases) 同时提供可本地上传的 ZIP。手工安装时，把插件目录复制到：
 
