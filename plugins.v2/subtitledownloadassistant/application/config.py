@@ -50,6 +50,7 @@ class PluginConfig:
     shooter_enabled: bool = False
     thunder_enabled: bool = False
     allow_machine_translation: bool = False
+    max_concurrent_tasks: int = 2
     max_candidate_attempts: int = 3
     source_priority: list[str] = field(
         default_factory=lambda: ["shooter", "thunder", "moviepilot", "assrt", "opensubtitles"]
@@ -81,6 +82,10 @@ class PluginConfig:
                 source_order.append(normalized)
         source_order.extend(source.value for source in SubtitleSource if source.value not in source_order)
         try:
+            concurrent_tasks = int(values.get("max_concurrent_tasks", 2))
+        except (TypeError, ValueError):
+            concurrent_tasks = 2
+        try:
             attempts = int(values.get("max_candidate_attempts", 3))
         except (TypeError, ValueError):
             attempts = 3
@@ -104,6 +109,7 @@ class PluginConfig:
             shooter_enabled=bool(values.get("shooter_enabled", False)),
             thunder_enabled=bool(values.get("thunder_enabled", False)),
             allow_machine_translation=bool(values.get("allow_machine_translation", False)),
+            max_concurrent_tasks=min(4, max(1, concurrent_tasks)),
             max_candidate_attempts=min(10, max(1, attempts)),
             source_priority=source_order,
             format_priority=normalize_format_priority(allowed_formats, values.get("format_priority")),
@@ -137,6 +143,7 @@ class PluginConfig:
             "shooter_enabled": self.shooter_enabled,
             "thunder_enabled": self.thunder_enabled,
             "allow_machine_translation": self.allow_machine_translation,
+            "max_concurrent_tasks": self.max_concurrent_tasks,
             "max_candidate_attempts": self.max_candidate_attempts,
             "source_priority": list(self.source_priority),
             "format_priority": list(self.format_priority),

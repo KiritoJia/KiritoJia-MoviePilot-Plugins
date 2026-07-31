@@ -22,6 +22,7 @@ class ArchiveExtractor:
 
         self._process: asyncio.subprocess.Process | None = None
         self._lock = asyncio.Lock()
+        self._operation_lock = asyncio.Lock()
         self._processed_paths: set[str] = set()
         self._processed_digests: set[str] = set()
         self._archive_count = 0
@@ -48,16 +49,17 @@ class ArchiveExtractor:
                     is_direct_file=True,
                 )
             ]
-        self._processed_paths.clear()
-        self._processed_digests.clear()
-        self._archive_count = 0
-        return await self._extract_recursive(
-            archive=asset.path,
-            output=output,
-            allowed=allowed,
-            depth=1,
-            logical_archive_parts=(self._outer_archive_name(source_name),),
-        )
+        async with self._operation_lock:
+            self._processed_paths.clear()
+            self._processed_digests.clear()
+            self._archive_count = 0
+            return await self._extract_recursive(
+                archive=asset.path,
+                output=output,
+                allowed=allowed,
+                depth=1,
+                logical_archive_parts=(self._outer_archive_name(source_name),),
+            )
 
     async def _extract_recursive(
         self,

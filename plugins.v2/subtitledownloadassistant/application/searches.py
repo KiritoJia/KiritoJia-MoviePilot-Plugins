@@ -28,6 +28,7 @@ from ..domain.language import candidate_chinese_priority
 from ..domain.models import MediaContext, SubtitleCandidate, new_id
 from .path_mapping import PathMapping, resolve_path
 from .ports import CandidateHandle, ManualSourceSearchResult, SubtitleSourcePort
+from .source_gate import SourceConcurrencyGate
 
 SEARCH_SESSION_REGION = "subtitledownloadassistant_manual_search"
 SEARCH_SESSION_TTL_SECONDS = 30 * 60
@@ -790,6 +791,7 @@ class ManualSearchService:
         sources: dict[SubtitleSource, SubtitleSourcePort],
         cache: Any | None = None,
         media_resolver: Callable[[MediaContext], Awaitable[Any | None]] | None = None,
+        source_gate: SourceConcurrencyGate | None = None,
     ) -> None:
         """创建人工搜索服务。"""
 
@@ -801,6 +803,7 @@ class ManualSearchService:
             ttl=SEARCH_SESSION_TTL_SECONDS,
         )
         self._media_resolver = media_resolver or _default_media_resolver
+        self._source_gate = source_gate or SourceConcurrencyGate(tuple(sources))
 
     @staticmethod
     def _session_key(session_id: str) -> str:
@@ -900,7 +903,12 @@ class ManualSearchService:
         for source in ordered_sources:
             adapter = self._sources[source]
             custom = values.get(source, values.get(source.value))
-            coroutines.append(adapter.manual_search(target.context, custom))
+            coroutines.append(
+                self._source_gate.run(
+                    source,
+                    lambda adapter=adapter, custom=custom: adapter.manual_search(target.context, custom),
+                )
+            )
         raw_results = await asyncio.gather(*coroutines, return_exceptions=True)
         runs: list[ManualSourceSearchResult] = []
         for source, result in zip(ordered_sources, raw_results, strict=True):

@@ -22,6 +22,7 @@ from .application.ports import SubtitleSourcePort
 from .application.record_lock import ReentrantAsyncLock
 from .application.retargeting import RetargetService
 from .application.searches import ManualSearchService, TargetQueryService
+from .application.source_gate import SourceConcurrencyGate
 from .application.tasks import TaskCoordinator, TaskWorkItem, build_media_context
 from .domain.enums import SourceHealth, SubtitleSource, TaskStatus, TaskTrigger
 from .domain.models import SourceStatus
@@ -59,7 +60,7 @@ class SubtitleDownloadAssistant(_PluginBase):
     plugin_name = "字幕下载助手"
     plugin_desc = "自动刮削媒体库影片字幕，支持常见视频格式及 STRM 格式。"
     plugin_icon = "https://raw.githubusercontent.com/KiritoJia/SubtitleDownloadAssistant/main/icons/SubtitleDownloadAssistant.png"
-    plugin_version = "1.0.1"
+    plugin_version = "1.1.0"
     plugin_author = "Kirito"
     plugin_label = "字幕"
     plugin_config_prefix = "subtitledownloadassistant_"
@@ -125,6 +126,13 @@ class SubtitleDownloadAssistant(_PluginBase):
         assrt_credentials = store.get_credentials_sync(SubtitleSource.ASSRT)
         allowed_formats = set(settings.RMT_SUBEXT)
         fingerprints = MediaFingerprintService()
+        source_gate = SourceConcurrencyGate(
+            tuple(SubtitleSource),
+            minimum_intervals={
+                SubtitleSource.SHOOTER: 1.0,
+                SubtitleSource.THUNDER: 1.0,
+            },
+        )
         sources: dict[SubtitleSource, SubtitleSourcePort] = {
             SubtitleSource.MOVIEPILOT: MoviePilotSource(
                 enabled=self.config.moviepilot_enabled,
@@ -163,6 +171,7 @@ class SubtitleDownloadAssistant(_PluginBase):
             config=self.config,
             inventory=inventory,
             ai_adapter=ai_adapter,
+            source_gate=source_gate,
         )
         for directory in self.config.custom_media_directories:
             if not Path(directory).is_dir():
@@ -177,7 +186,7 @@ class SubtitleDownloadAssistant(_PluginBase):
         self.inventory = inventory
         self.coordinator = coordinator
         self.targets = targets
-        self.manual_search = ManualSearchService(targets=targets, sources=sources)
+        self.manual_search = ManualSearchService(targets=targets, sources=sources, source_gate=source_gate)
         self.retargeting = RetargetService(
             store=store,
             filesystem=filesystem,

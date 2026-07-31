@@ -41,6 +41,7 @@ from .common import (
     safe_file_name,
     subtitle_format,
 )
+from .limiter import SlidingWindowLimiter
 
 SEARCH_CACHE_TTL_SECONDS = 30 * 60
 SEARCH_CACHE_REGION = "subtitledownloadassistant_source_opensubtitles"
@@ -51,7 +52,7 @@ class OpenSubtitlesSource:
 
     source = SubtitleSource.OPENSUBTITLES
     BASE_URL = "https://api.opensubtitles.com/api/v1"
-    USER_AGENT = "MoviePilot SubtitleDownloadAssistant/1.0.1"
+    USER_AGENT = "MoviePilot SubtitleDownloadAssistant/1.1.0"
 
     def __init__(
         self,
@@ -59,6 +60,7 @@ class OpenSubtitlesSource:
         credentials: dict[str, str],
         allowed_formats: set[str],
         cache: AsyncMemoryBackend | None = None,
+        limiter: SlidingWindowLimiter | None = None,
     ) -> None:
         """创建 OpenSubtitles 来源适配器。"""
 
@@ -73,6 +75,7 @@ class OpenSubtitlesSource:
         self._jwt: str | None = None
         self._cooldown_until: datetime | None = None
         self._login_lock = asyncio.Lock()
+        self._request_limiter = limiter or SlidingWindowLimiter(limit=1, window_seconds=1)
         self._last_details: dict[str, Any] = {}
         self._active_proxies: dict[str, str] = settings.PROXY or {}
         self._credential_generation = 0
@@ -361,6 +364,7 @@ class OpenSubtitlesSource:
         """请求并校验一页 OpenSubtitles 搜索响应。"""
 
         self._ensure_available()
+        await self._request_limiter.acquire(wait=True)
         request_params = {**params, "page": page}
         response, transport_details, active_proxies = await request_res_with_proxy_fallback(
             "get_res",
@@ -596,6 +600,7 @@ class OpenSubtitlesSource:
         async with self._login_lock:
             if self._jwt and not force:
                 return self._jwt
+            await self._request_limiter.acquire(wait=True)
             response, transport_details, active_proxies = await request_res_with_proxy_fallback(
                 "post_res",
                 f"{self.BASE_URL}/login",
@@ -635,6 +640,7 @@ class OpenSubtitlesSource:
         """请求一次临时下载链接，JWT 失效时只重试一次。"""
 
         await self._login()
+        await self._request_limiter.acquire(wait=True)
         response, transport_details, active_proxies = await request_res_with_proxy_fallback(
             "post_res",
             f"{self.BASE_URL}/download",
@@ -720,6 +726,7 @@ class OpenSubtitlesSource:
         """清除内存 JWT 并关闭插件级缓存。"""
 
         self._jwt = None
+        await self._request_limiter.reset()
         await self._cache.close()
 
     async def clear_cache(self) -> None:

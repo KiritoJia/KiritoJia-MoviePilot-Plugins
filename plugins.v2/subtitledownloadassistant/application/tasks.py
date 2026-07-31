@@ -1,4 +1,4 @@
-"""字幕下载助手串行任务编排服务。"""
+"""字幕下载助手受限并发任务编排服务。"""
 
 from __future__ import annotations
 
@@ -70,6 +70,7 @@ from .ports import (
     SourceSearchResult,
     SubtitleSourcePort,
 )
+from .source_gate import SourceConcurrencyGate
 
 SOURCE_NAMES = {
     SubtitleSource.MOVIEPILOT: "MoviePilot 站点字幕源",
@@ -256,7 +257,7 @@ def build_media_context(target: Any, meta: Any, mediainfo: Any) -> MediaContext 
 
 
 class TaskCoordinator:
-    """维护单 worker 队列并执行字幕搜索、匹配与落盘。"""
+    """维护受限 worker 池并执行字幕搜索、匹配与落盘。"""
 
     def __init__(
         self,
@@ -268,6 +269,7 @@ class TaskCoordinator:
         config: PluginConfig,
         inventory: SubtitleInventory,
         ai_adapter: Any | None = None,
+        source_gate: SourceConcurrencyGate | None = None,
     ) -> None:
         """创建可注入依赖的任务协调器。"""
 
@@ -284,11 +286,15 @@ class TaskCoordinator:
         else:
             self.ai_adapter = AiAttributionAdapter(lambda: self.config)
         self._queue: asyncio.Queue[TaskWorkItem] = asyncio.Queue()
-        self._worker: asyncio.Task[None] | None = None
+        self._workers: list[asyncio.Task[None]] = []
+        self._source_gate = source_gate or SourceConcurrencyGate(tuple(sources))
         self._active_paths: dict[str, str] = {}
         self._active_items: dict[str, TaskWorkItem] = {}
         self._active_manual: dict[str, str] = {}
+        self._target_locks: dict[str, asyncio.Lock] = {}
+        self._target_lock_users: dict[str, int] = {}
         self._lock = asyncio.Lock()
+        self._ai_lock = asyncio.Lock()
         self._accepting = True
         self._generation = 0
 
@@ -341,10 +347,11 @@ class TaskCoordinator:
         return "，".join(parts)
 
     def _ensure_worker(self) -> None:
-        """在当前事件循环中懒启动唯一 worker。"""
+        """在当前事件循环中补足配置数量的 worker。"""
 
-        if self._worker is None or self._worker.done():
-            self._worker = asyncio.create_task(self._worker_loop())
+        self._workers = [worker for worker in self._workers if not worker.done()]
+        while self._accepting and len(self._workers) < self.config.max_concurrent_tasks:
+            self._workers.append(asyncio.create_task(self._worker_loop(), name="subtitle-download-worker"))
 
     async def enqueue(self, item: TaskWorkItem) -> str | None:
         """创建或合并一个运行期字幕任务。"""
@@ -381,7 +388,7 @@ class TaskCoordinator:
             return task.id
 
     async def enqueue_manual(self, item: TaskWorkItem) -> tuple[str | None, bool]:
-        """把用户选定候选提交到单 worker，并合并同会话同候选的非终态任务。"""
+        """把用户选定候选提交到 worker 池，并合并同会话同候选的非终态任务。"""
 
         if not self._accepting or item.manual_handle is None or not item.manual_session_id:
             return None, False
@@ -424,19 +431,25 @@ class TaskCoordinator:
             return task.id, False
 
     async def _worker_loop(self) -> None:
-        """串行消费运行期队列。"""
+        """消费运行期队列；同一路径任务通过目标锁保持串行。"""
 
         while self._accepting:
             item = await self._queue.get()
+            key = self._path_key(item.context.target_path)
+            target_lock: asyncio.Lock | None = None
             try:
-                task = await self.store.get_task(item.task_id) if item.task_id else None
-                if task is not None:
-                    await self._process(task, item)
-                else:
-                    logger.error(
-                        f"字幕任务 {item.task_id or '未知'} 无法开始处理：持久化记录不存在，"
-                        f"触发方式为“{TRIGGER_NAMES[item.trigger]}”"
-                    )
+                async with self._lock:
+                    target_lock = self._target_locks.setdefault(key, asyncio.Lock())
+                    self._target_lock_users[key] = self._target_lock_users.get(key, 0) + 1
+                async with target_lock:
+                    task = await self.store.get_task(item.task_id) if item.task_id else None
+                    if task is not None:
+                        await self._process(task, item)
+                    else:
+                        logger.error(
+                            f"字幕任务 {item.task_id or '未知'} 无法开始处理：持久化记录不存在，"
+                            f"触发方式为“{TRIGGER_NAMES[item.trigger]}”"
+                        )
             except asyncio.CancelledError:
                 raise
             except Exception as exc:  # noqa: BLE001 - worker 必须隔离单项任务异常
@@ -446,19 +459,26 @@ class TaskCoordinator:
                 )
             finally:
                 self._queue.task_done()
-                key = self._path_key(item.context.target_path)
                 async with self._lock:
-                    task_id = self._active_paths.pop(key, None)
-                    if task_id:
-                        self._active_items.pop(task_id, None)
+                    if target_lock is not None:
+                        users = self._target_lock_users.get(key, 0) - 1
+                        if users <= 0:
+                            self._target_lock_users.pop(key, None)
+                            if self._target_locks.get(key) is target_lock:
+                                self._target_locks.pop(key, None)
+                        else:
+                            self._target_lock_users[key] = users
+                    if self._active_paths.get(key) == item.task_id:
+                        self._active_paths.pop(key, None)
+                    if item.task_id:
+                        self._active_items.pop(item.task_id, None)
                     if item.manual_handle is not None and item.manual_session_id:
                         manual_key = (
                             f"{item.manual_session_id}:{item.manual_handle.candidate.source.value}:"
                             f"{item.manual_handle.candidate.stable_key}"
                         )
-                        manual_task_id = self._active_manual.pop(manual_key, None)
-                        if manual_task_id:
-                            self._active_items.pop(manual_task_id, None)
+                        if self._active_manual.get(manual_key) == item.task_id:
+                            self._active_manual.pop(manual_key, None)
 
     async def _task_for_path(self, path_key: str) -> SubtitleTask | None:
         """按运行期路径键读取当前任务。"""
@@ -621,7 +641,15 @@ class TaskCoordinator:
             logger.warning(f"{self._task_label(task)}没有可调用的字幕源，因此未获得当前目标的候选")
             return []
         results = await asyncio.gather(
-            *(self.sources[source].search(item.context, self.config.allow_machine_translation) for source in enabled),
+            *(
+                self._source_gate.run(
+                    source,
+                    lambda source=source: self.sources[source].search(
+                        item.context, self.config.allow_machine_translation
+                    ),
+                )
+                for source in enabled
+            ),
             return_exceptions=True,
         )
         handles: list[CandidateHandle] = []
@@ -957,41 +985,42 @@ class TaskCoordinator:
             await self._save(task)
 
         try:
-            call = getattr(adapter, "attribute_files", None) or getattr(adapter, "takeover", None)
-            if call is None:
-                return {}
-            try:
-                parameters = inspect.signature(call).parameters.values()
-                supports_callbacks = any(
-                    parameter.kind is inspect.Parameter.VAR_KEYWORD for parameter in parameters
-                ) or {"on_batch_start", "on_batch_end"}.issubset(inspect.signature(call).parameters)
-            except (TypeError, ValueError):
-                # 无法反射的可调用对象按完整协议调用一次；绝不以 TypeError 重试。
-                supports_callbacks = True
-            try:
-                if not bool(authorized()):
+            async with self._ai_lock:
+                call = getattr(adapter, "attribute_files", None) or getattr(adapter, "takeover", None)
+                if call is None:
                     return {}
-            except Exception:  # noqa: BLE001 - 不可信 AI 适配器失败时必须拒绝调用
-                return {}
-            if supports_callbacks:
-                ai_result = await call(
-                    item.context,
-                    candidate,
-                    snapshot,
-                    ai_inputs,
-                    task.package_attribution_strategy,
-                    on_batch_start=on_batch_start,
-                    on_batch_end=on_batch_end,
-                )
-            else:
-                # 兼容只实现核心五参数的旧测试替身，调用仍只发生一次。
-                ai_result = await call(
-                    item.context,
-                    candidate,
-                    snapshot,
-                    ai_inputs,
-                    task.package_attribution_strategy,
-                )
+                try:
+                    parameters = inspect.signature(call).parameters.values()
+                    supports_callbacks = any(
+                        parameter.kind is inspect.Parameter.VAR_KEYWORD for parameter in parameters
+                    ) or {"on_batch_start", "on_batch_end"}.issubset(inspect.signature(call).parameters)
+                except (TypeError, ValueError):
+                    # 无法反射的可调用对象按完整协议调用一次；绝不以 TypeError 重试。
+                    supports_callbacks = True
+                try:
+                    if not bool(authorized()):
+                        return {}
+                except Exception:  # noqa: BLE001 - 不可信 AI 适配器失败时必须拒绝调用
+                    return {}
+                if supports_callbacks:
+                    ai_result = await call(
+                        item.context,
+                        candidate,
+                        snapshot,
+                        ai_inputs,
+                        task.package_attribution_strategy,
+                        on_batch_start=on_batch_start,
+                        on_batch_end=on_batch_end,
+                    )
+                else:
+                    # 兼容只实现核心五参数的旧测试替身，调用仍只发生一次。
+                    ai_result = await call(
+                        item.context,
+                        candidate,
+                        snapshot,
+                        ai_inputs,
+                        task.package_attribution_strategy,
+                    )
         except asyncio.CancelledError:
             raise
         except Exception as exc:  # noqa: BLE001 - AI 接管错误必须软失败
@@ -1913,7 +1942,10 @@ class TaskCoordinator:
             await self._set_stage(task, TaskStage.DOWNLOAD)
             active_stage = TaskStage.DOWNLOAD
             logger.info(f"{self._task_label(task)}开始下载{self._candidate_label(candidate)}")
-            asset = await self.sources[candidate.source].download(handle, candidate_dir)
+            asset = await self._source_gate.run(
+                candidate.source,
+                lambda: self.sources[candidate.source].download(handle, candidate_dir),
+            )
             logger.info(
                 f"{self._task_label(task)}已下载{self._candidate_label(candidate)}，得到文件“{asset.file_name}”"
             )
@@ -2295,7 +2327,13 @@ class TaskCoordinator:
     async def refresh_sources(self, manual: bool = True) -> list[SourceStatus]:
         """并发刷新全部字幕源且互不连带失败。"""
 
-        tasks = [self.sources[source].refresh(manual=manual) for source in SubtitleSource]
+        tasks = [
+            self._source_gate.run(
+                source,
+                lambda source=source: self.sources[source].refresh(manual=manual),
+            )
+            for source in SubtitleSource
+        ]
         results = await asyncio.gather(*tasks, return_exceptions=True)
         previous = {item.source: item for item in await self.store.list_source_statuses()}
         statuses: list[SourceStatus] = []
@@ -2328,16 +2366,19 @@ class TaskCoordinator:
         self._accepting = False
         self._generation += 1
         worker_loop: asyncio.AbstractEventLoop | None = None
-        if self._worker and not self._worker.done():
-            worker_loop = self._worker.get_loop()
+        active_workers = [worker for worker in self._workers if not worker.done()]
+        if active_workers:
+            worker_loop = active_workers[0].get_loop()
             try:
                 current_loop = asyncio.get_running_loop()
             except RuntimeError:
                 current_loop = None
             if worker_loop is current_loop:
-                self._worker.cancel()
+                for worker in active_workers:
+                    worker.cancel()
             elif worker_loop.is_running():
-                worker_loop.call_soon_threadsafe(self._worker.cancel)
+                for worker in active_workers:
+                    worker_loop.call_soon_threadsafe(worker.cancel)
         self._active_paths.clear()
         self._active_manual.clear()
         self._active_items.clear()
@@ -2368,10 +2409,10 @@ class TaskCoordinator:
     async def shutdown(self, reason: str = "插件已停用，未完成任务已中断") -> None:
         """异步停止并等待运行资源释放。"""
 
-        worker = self._worker
+        workers = list(self._workers)
         self.stop_sync(reason)
-        if worker and worker.get_loop() is asyncio.get_running_loop():
-            await asyncio.gather(worker, return_exceptions=True)
+        if workers and workers[0].get_loop() is asyncio.get_running_loop():
+            await asyncio.gather(*workers, return_exceptions=True)
         await self._cleanup_runtime()
 
     async def reset(self) -> None:

@@ -598,7 +598,7 @@ class ApiController:
         payload: ManualDownloadRequest,
         _: User = Depends(get_current_active_manage_user_async),  # noqa: B008 - FastAPI 依赖注入
     ) -> ManualDownloadResponse:
-        """把人工选定候选提交到现有单 worker。"""
+        """把人工选定候选提交到现有 worker 池。"""
 
         candidate = await self._plugin.manual_search.get_candidate(session_id, payload.candidate_key)
         if candidate is None:
