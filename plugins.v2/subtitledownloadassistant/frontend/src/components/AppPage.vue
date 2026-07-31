@@ -7,6 +7,7 @@ import RecordsView from '@/views/RecordsView.vue'
 import SearchView from '@/views/SearchView.vue'
 import SourcesView from '@/views/SourcesView.vue'
 import TasksView from '@/views/TasksView.vue'
+import frontendPackage from '../../package.json'
 
 const props = withDefaults(defineProps<{
   api: PluginApi
@@ -19,6 +20,7 @@ const props = withDefaults(defineProps<{
 const emit = defineEmits<{ action: [] }>()
 type WorkbenchView = 'overview' | 'tasks' | 'records' | 'search' | 'sources'
 const SCROLL_MEMORY_SETTLE_MS = 600
+const APP_VERSION = frontendPackage.version
 
 const activeView = ref<WorkbenchView>('overview')
 const navigation: Array<{ value: WorkbenchView; label: string; icon: string }> = [
@@ -210,7 +212,7 @@ onBeforeUnmount(() => {
       </nav>
       <div class="sidebar-footer">
         <span>字幕下载助手</span>
-        <strong>v1.1.0</strong>
+        <strong>v{{ APP_VERSION }}</strong>
       </div>
     </aside>
 
@@ -220,7 +222,7 @@ onBeforeUnmount(() => {
           <div class="brand-mark"><VIcon icon="mdi-subtitles-outline" size="21" aria-hidden="true" /></div>
           <div class="brand-copy"><strong>字幕下载助手</strong><span>MoviePilot</span></div>
         </div>
-        <span class="mobile-version">v1.1.0</span>
+        <span class="mobile-version">v{{ APP_VERSION }}</span>
       </header>
 
       <nav class="mobile-navigation" aria-label="字幕下载助手工作台视图">

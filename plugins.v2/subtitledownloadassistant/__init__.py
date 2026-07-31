@@ -60,7 +60,7 @@ class SubtitleDownloadAssistant(_PluginBase):
     plugin_name = "字幕下载助手"
     plugin_desc = "自动刮削媒体库影片字幕，支持常见视频格式及 STRM 格式。"
     plugin_icon = "https://raw.githubusercontent.com/KiritoJia/SubtitleDownloadAssistant/main/icons/SubtitleDownloadAssistant.png"
-    plugin_version = "1.1.4"
+    plugin_version = "1.1.5"
     plugin_author = "Kirito"
     plugin_label = "字幕"
     plugin_config_prefix = "subtitledownloadassistant_"
