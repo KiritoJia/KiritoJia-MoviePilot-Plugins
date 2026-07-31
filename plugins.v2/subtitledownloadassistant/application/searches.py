@@ -701,7 +701,9 @@ class TargetQueryService:
             if key in selected_keys and key not in targets_by_media:
                 remaining_by_media.setdefault(key, path)
 
-        semaphore = asyncio.Semaphore(4)
+        # MoviePilot 识别一个本地媒体可能连续查询 TMDB 电影/剧集详情。
+        # 自定义目录扫描不应与字幕下载任务一样并发，否则容易一次性打满代理连接。
+        semaphore = asyncio.Semaphore(1)
 
         async def recognize(path: Path) -> tuple[SearchTarget, bool]:
             async with semaphore:
