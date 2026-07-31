@@ -60,7 +60,7 @@ class SubtitleDownloadAssistant(_PluginBase):
     plugin_name = "字幕下载助手"
     plugin_desc = "自动刮削媒体库影片字幕，支持常见视频格式及 STRM 格式。"
     plugin_icon = "https://raw.githubusercontent.com/KiritoJia/SubtitleDownloadAssistant/main/icons/SubtitleDownloadAssistant.png"
-    plugin_version = "1.1.2"
+    plugin_version = "1.1.3"
     plugin_author = "Kirito"
     plugin_label = "字幕"
     plugin_config_prefix = "subtitledownloadassistant_"
@@ -394,7 +394,9 @@ class SubtitleDownloadAssistant(_PluginBase):
                 scan = None
             targets = scan.targets if scan is not None else []
             if self.manual_search is not None and targets:
-                semaphore = asyncio.Semaphore(4)
+                # Enriching targets may issue several TMDB requests per item.
+                # Keep custom-directory scans gentle on the configured proxy.
+                semaphore = asyncio.Semaphore(1)
 
                 async def enrich(target: Any) -> Any:
                     async with semaphore:
