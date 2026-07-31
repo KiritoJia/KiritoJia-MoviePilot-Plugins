@@ -36,6 +36,7 @@ export const taskTriggerLabels: Record<TaskTrigger, string> = {
   transfer_event: '整理事件',
   custom_directory_scan: '目录扫描',
   manual_candidate: '人工下载',
+  retry: '重新运行',
 }
 
 export const recordStates: Record<RecordStatus, StatePresentation> = {

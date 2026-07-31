@@ -60,7 +60,7 @@ class SubtitleDownloadAssistant(_PluginBase):
     plugin_name = "字幕下载助手"
     plugin_desc = "自动刮削媒体库影片字幕，支持常见视频格式及 STRM 格式。"
     plugin_icon = "https://raw.githubusercontent.com/KiritoJia/SubtitleDownloadAssistant/main/icons/SubtitleDownloadAssistant.png"
-    plugin_version = "1.1.3"
+    plugin_version = "1.1.4"
     plugin_author = "Kirito"
     plugin_label = "字幕"
     plugin_config_prefix = "subtitledownloadassistant_"
@@ -333,13 +333,19 @@ class SubtitleDownloadAssistant(_PluginBase):
             )
         )
 
-    async def scan_custom_media_directories(self, automatic: bool = False) -> dict[str, int]:
-        """增量扫描自定义目录，只为新增、变更或人工重试目标提交任务。"""
+    async def scan_custom_media_directories(
+        self,
+        automatic: bool = False,
+        force: bool = False,
+    ) -> dict[str, int]:
+        """扫描自定义目录；人工全量模式可忽略已有文件签名。"""
 
         if not self.get_state() or self.targets is None or self.coordinator is None or self.store is None:
             raise RuntimeError("字幕下载助手当前未启用")
         if not self.config.custom_media_directories:
             raise ValueError("请先保存至少一个自定义媒体目录")
+        if automatic and force:
+            raise ValueError("目录自动巡检不能使用全量重新扫描模式")
         if self._history_scan_lock.locked():
             raise RuntimeError("自定义目录扫描正在进行，请勿重复提交")
 
@@ -357,7 +363,9 @@ class SubtitleDownloadAssistant(_PluginBase):
                 )
             }
             pending_stability_keys: set[str] = set()
-            if automatic:
+            if force:
+                changed_keys = set(snapshot.files)
+            elif automatic:
                 pending_stability_keys = signature_changed_keys
                 changed_keys = {
                     key
@@ -372,21 +380,22 @@ class SubtitleDownloadAssistant(_PluginBase):
                     if previous_index.get(key, {}).get("pending_stability") is True
                 )
             retry_count = 0
-            for key in set(snapshot.files).difference(changed_keys).difference(signature_changed_keys):
-                task_id = previous_index.get(key, {}).get("last_task_id")
-                if not task_id:
-                    continue
-                task = await self.store.get_task(task_id)
-                retryable = (
-                    task is not None
-                    and (
-                        task.status is TaskStatus.INTERRUPTED
-                        or (not automatic and task.status is TaskStatus.FAILED)
+            if not force:
+                for key in set(snapshot.files).difference(changed_keys).difference(signature_changed_keys):
+                    task_id = previous_index.get(key, {}).get("last_task_id")
+                    if not task_id:
+                        continue
+                    task = await self.store.get_task(task_id)
+                    retryable = (
+                        task is not None
+                        and (
+                            task.status is TaskStatus.INTERRUPTED
+                            or (not automatic and task.status is TaskStatus.FAILED)
+                        )
                     )
-                )
-                if retryable:
-                    changed_keys.add(key)
-                    retry_count += 1
+                    if retryable:
+                        changed_keys.add(key)
+                        retry_count += 1
 
             if changed_keys:
                 scan = await self.targets.scan_custom_directories(logical_keys=changed_keys)
@@ -448,8 +457,9 @@ class SubtitleDownloadAssistant(_PluginBase):
             fallback_file_count = scan.fallback_file_count if scan is not None else 0
             unchanged_count = max(0, len(snapshot.files) - len(changed_keys) - len(pending_stability_keys))
             removed_count = len(set(previous_index).difference(snapshot.files))
+            scan_mode = "全量重新扫描" if force else "增量扫描"
             logger.info(
-                "字幕下载助手自定义目录增量扫描完成："
+                f"字幕下载助手自定义目录{scan_mode}完成："
                 f"索引 {snapshot.indexed_file_count} 个媒体文件，"
                 f"跳过 {unchanged_count} 个未变更目标，"
                 f"形成 {len(targets)} 个字幕目标，"

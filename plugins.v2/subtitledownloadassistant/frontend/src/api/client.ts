@@ -100,14 +100,21 @@ export function getTask(api: PluginApi, pluginId: string, taskId: string): Promi
 export function scanCustomDirectories(
   api: PluginApi,
   pluginId: string,
+  options: { full?: boolean } = {},
 ): Promise<CustomDirectoryScanResponse> {
-  return api.post<CustomDirectoryScanResponse>(pluginPath(pluginId, 'tasks/scan-custom-directories'))
+  const suffix = options.full ? '?full=true' : ''
+  return api.post<CustomDirectoryScanResponse>(`${pluginPath(pluginId, 'tasks/scan-custom-directories')}${suffix}`)
 }
 
 export async function deleteTask(api: PluginApi, pluginId: string, taskId: string): Promise<StandardResponse> {
   if (!api.delete) throw new Error('当前 MoviePilot 前端不支持删除请求')
   const response = await api.delete<StandardResponse>(pluginPath(pluginId, `tasks/${encodeURIComponent(taskId)}`))
   return requireSuccess(response, '任务记录删除失败')
+}
+
+export async function retryTask(api: PluginApi, pluginId: string, taskId: string): Promise<StandardResponse> {
+  const response = await api.post<StandardResponse>(pluginPath(pluginId, `tasks/${encodeURIComponent(taskId)}/retry`))
+  return requireSuccess(response, '任务重新运行失败')
 }
 
 export async function clearTerminalTasks(

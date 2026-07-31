@@ -23,7 +23,7 @@ from ..application.record_deletion import (
 )
 from ..application.retargeting import RetargetMapping
 from ..application.tasks import TaskWorkItem
-from ..domain.enums import FileLocation, RecordStatus, SubtitleSource, TaskStatus
+from ..domain.enums import FileLocation, RecordStatus, SubtitleSource, TaskStatus, TaskTrigger
 from ..domain.models import MatchRecord, SubtitleTask
 from ..domain.query import assrt_title_queries
 from .schemas import (
@@ -246,12 +246,13 @@ class ApiController:
 
     async def scan_custom_directories(
         self,
+        full: bool = Query(default=False),  # noqa: B008 - FastAPI 查询参数注入
         _: User = Depends(get_current_active_manage_user_async),  # noqa: B008 - FastAPI 依赖注入
     ) -> CustomDirectoryScanResponse:
-        """增量扫描已保存目录，并人工重试上次失败的媒体。"""
+        """扫描已保存目录；可显式忽略索引并重新处理全部媒体。"""
 
         try:
-            result = await self._plugin.scan_custom_media_directories()
+            result = await self._plugin.scan_custom_media_directories(force=full)
         except ValueError as exc:
             raise HTTPException(status_code=422, detail=str(exc)) from exc
         except RuntimeError as exc:
@@ -259,14 +260,60 @@ class ApiController:
         matched_count = int(result["matched_count"])
         submitted_count = int(result["submitted_count"])
         if submitted_count:
-            message = f"已从自定义目录提交或合并 {submitted_count} 个字幕任务"
+            message = (
+                f"全量重新扫描已提交或合并 {submitted_count} 个字幕任务"
+                if full
+                else f"已从自定义目录提交或合并 {submitted_count} 个字幕任务"
+            )
         elif matched_count:
-            message = "新增或变更的媒体任务均已在处理队列中"
+            message = (
+                "全量重新扫描目标均已在处理队列中"
+                if full
+                else "新增或变更的媒体任务均已在处理队列中"
+            )
+        elif full and result["indexed_file_count"]:
+            message = "全量重新扫描未生成可处理的媒体目标"
         elif result["indexed_file_count"]:
             message = "没有发现新增或变更的媒体文件"
         else:
             message = "自定义目录中没有找到支持的视频或 STRM 文件"
         return CustomDirectoryScanResponse(message=message, **result)
+
+    async def retry_task(
+        self,
+        task_id: str,
+        _: User = Depends(get_current_active_manage_user_async),  # noqa: B008 - FastAPI 依赖注入
+    ) -> Response:
+        """从终态任务快照创建一条新的自动字幕任务。"""
+
+        task = await self._plugin.store.get_task(task_id)
+        if task is None:
+            raise HTTPException(status_code=404, detail="任务不存在")
+        if task.status not in {TaskStatus.SKIPPED, TaskStatus.FAILED, TaskStatus.INTERRUPTED}:
+            raise HTTPException(status_code=409, detail="只有已跳过、失败或已中断的任务可以重新运行")
+        if self._plugin.targets is None or self._plugin.coordinator is None:
+            raise HTTPException(status_code=409, detail="字幕下载助手当前未启用")
+
+        target = self._plugin.targets.retry_target(task)
+        if self._plugin.manual_search is not None:
+            target = await self._plugin.manual_search.enrich_target(target)
+        new_task_id = await self._plugin.coordinator.enqueue(
+            TaskWorkItem(
+                context=target.context,
+                target=target.target_item,
+                host_mediainfo=target.host_mediainfo,
+                trigger=TaskTrigger.RETRY,
+                history_target_path=target.history_target_path,
+                target_history_id=target.history_id,
+            )
+        )
+        if new_task_id is None:
+            raise HTTPException(status_code=409, detail="插件正在停止，暂时不能重新运行任务")
+        return Response(
+            success=True,
+            message="已重新提交任务；同路径已有运行任务时将自动合并",
+            data={"task_id": new_task_id, "original_task_id": task.id},
+        )
 
     async def list_records(
         self,
@@ -813,7 +860,7 @@ class ApiController:
         return Response(success=True, message="字幕源凭据已清除", data={"configured": False})
 
     def routes(self) -> list[dict[str, Any]]:
-        """每次返回全新的 19 条 Bearer 路由定义。"""
+        """每次返回全新的 Bearer 路由定义。"""
 
         definitions = [
             ("/tasks", self.list_tasks, ["GET"], TaskPage, "查询字幕任务"),
@@ -829,8 +876,9 @@ class ApiController:
                 self.scan_custom_directories,
                 ["POST"],
                 CustomDirectoryScanResponse,
-                "增量扫描自定义媒体目录",
+                "扫描或全量重新扫描自定义媒体目录",
             ),
+            ("/tasks/{task_id}/retry", self.retry_task, ["POST"], Response, "重新运行终态字幕任务"),
             ("/tasks/{task_id}", self.get_task, ["GET"], TaskDetail, "查询字幕任务详情"),
             ("/tasks/{task_id}", self.delete_task, ["DELETE"], Response, "删除字幕任务记录"),
             ("/records", self.list_records, ["GET"], RecordPage, "查询字幕匹配记录"),

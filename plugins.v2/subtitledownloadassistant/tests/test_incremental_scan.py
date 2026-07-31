@@ -87,6 +87,7 @@ def _load_plugin_class():
         "application.record_lock": {"ReentrantAsyncLock": object},
         "application.retargeting": {"RetargetService": object},
         "application.searches": {"ManualSearchService": object, "TargetQueryService": object},
+        "application.source_gate": {"SourceConcurrencyGate": object},
         "application.tasks": {
             "TaskCoordinator": object,
             "TaskWorkItem": TaskWorkItem,
@@ -291,6 +292,13 @@ def test_incremental_scan_state_flow() -> None:
         seventh = await plugin.scan_custom_media_directories(automatic=False)
         assert seventh["retry_count"] == 1
         assert seventh["submitted_count"] == 1
+
+        store.tasks["task-3"].status = TaskStatus.SUCCESS
+        eighth = await plugin.scan_custom_media_directories(force=True)
+        assert eighth["changed_count"] == 1
+        assert eighth["unchanged_count"] == 0
+        assert eighth["retry_count"] == 0
+        assert eighth["submitted_count"] == 1
 
     asyncio.run(run())
 

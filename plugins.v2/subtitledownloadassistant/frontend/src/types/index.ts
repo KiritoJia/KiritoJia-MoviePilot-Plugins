@@ -13,7 +13,7 @@ export interface HostToast {
 }
 
 export type TaskStatus = 'queued' | 'processing' | 'success' | 'skipped' | 'failed' | 'interrupted'
-export type TaskTrigger = 'transfer_event' | 'custom_directory_scan' | 'manual_candidate'
+export type TaskTrigger = 'transfer_event' | 'custom_directory_scan' | 'manual_candidate' | 'retry'
 export type TaskStage = 'preflight' | 'inventory' | 'search' | 'download' | 'extract' | 'match' | 'ai_attribution' | 'write'
 export type RecordStatus = 'matched' | 'staged' | 'unmatched'
 export type RecordDeleteMode = 'record_only' | 'record_and_file'

@@ -341,23 +341,31 @@ export function createMockApi() {
           type: 'dir',
         })) as T
       }
-      if (path.endsWith('/tasks/scan-custom-directories')) {
+      if (path.includes('/tasks/scan-custom-directories')) {
+        const full = path.includes('full=true')
         return {
           success: true,
-          message: '已从自定义目录提交或合并 2 个字幕任务',
+          message: full ? '全量重新扫描已提交或合并 9 个字幕任务' : '已从自定义目录提交或合并 2 个字幕任务',
           history_count: 32,
           indexed_file_count: 9,
-          matched_count: 2,
-          submitted_count: 2,
+          matched_count: full ? 9 : 2,
+          submitted_count: full ? 9 : 2,
           history_matched_count: 1,
           recognized_file_count: 1,
           fallback_file_count: 1,
-          unchanged_count: 6,
-          changed_count: 2,
+          unchanged_count: full ? 0 : 6,
+          changed_count: full ? 9 : 2,
           pending_stability_count: 0,
           retry_count: 0,
           removed_count: 0,
         } satisfies CustomDirectoryScanResponse as T
+      }
+      if (/\/tasks\/[^/]+\/retry$/.test(path)) {
+        return {
+          success: true,
+          message: '已重新提交任务；同路径已有运行任务时将自动合并',
+          data: { task_id: 'task-retry-demo' },
+        } as T
       }
       if (path.endsWith('/sources/refresh')) return { success: true, message: '字幕源状态已刷新' } as T
       if (path.endsWith('/searches')) {

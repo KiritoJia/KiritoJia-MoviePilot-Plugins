@@ -407,6 +407,41 @@ class TargetQueryService:
         resolved = await self._resolve_target(target)
         return resolved.context, resolved.target_item
 
+    def retry_target(self, task: Any) -> SearchTarget:
+        """使用终态任务快照重建可重新入队的本地媒体目标。"""
+
+        path = Path(str(task.target_path))
+        context = MediaContext(
+            title=str(task.media_title),
+            year=task.year,
+            media_type=task.media_type,
+            season=task.season,
+            episode=task.episode,
+            tmdb_id=task.tmdb_id,
+            imdb_id=task.imdb_id,
+            target_path=str(path),
+            target_file_name=path.name,
+            target_storage=task.target_storage or "local",
+        )
+        host_type = HostMediaType.TV if context.media_type is MediaType.TV else HostMediaType.MOVIE
+        host_fields: dict[str, Any] = {"type": host_type, "title": context.title}
+        if context.year is not None:
+            host_fields["year"] = str(context.year)
+        if context.season is not None:
+            host_fields["season"] = context.season
+        if context.tmdb_id is not None:
+            host_fields["tmdb_id"] = context.tmdb_id
+        if context.imdb_id is not None:
+            host_fields["imdb_id"] = context.imdb_id
+        return SearchTarget(
+            history_id=task.target_history_id,
+            context=context,
+            transferred_at=task.finished_at or task.created_at,
+            target_item=self._local_file_item(SimpleNamespace(), path),
+            host_mediainfo=HostMediaInfo(**host_fields),
+            history_target_path=task.history_target_path,
+        )
+
     async def _histories(self) -> list[Any]:
         """分页读取全部成功整理历史。"""
 

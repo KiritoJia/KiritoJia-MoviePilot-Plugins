@@ -100,6 +100,7 @@ const clearOpen = ref(false)
 const clearSource = ref<ExternalSource | null>(null)
 const clearing = ref(false)
 const scanningDirectories = ref(false)
+const fullScanOpen = ref(false)
 const directoryScanMessage = ref('')
 const directoryScanType = ref<'success' | 'warning'>('success')
 
@@ -430,24 +431,26 @@ async function saveConfig(): Promise<void> {
   }
 }
 
-async function scanDirectoriesNow(): Promise<void> {
+async function scanDirectoriesNow(full = false): Promise<void> {
   if (!canScanDirectories.value) return
   directoryScanMessage.value = ''
   saveError.value = ''
   scanningDirectories.value = true
   try {
-    const response = await scanCustomDirectories(props.api, pluginId.value)
+    const response = await scanCustomDirectories(props.api, pluginId.value, { full })
+    fullScanOpen.value = false
     directoryScanType.value = response.fallback_file_count > 0 ? 'warning' : 'success'
     directoryScanMessage.value = [
       response.message,
       `目录文件 ${response.indexed_file_count} 个`,
-      `未变更已跳过 ${response.unchanged_count} 个`,
+      full ? `全量目标 ${response.changed_count} 个` : `未变更已跳过 ${response.unchanged_count} 个`,
       `本次处理 ${response.matched_count} 个`,
       response.retry_count ? `重试失败项 ${response.retry_count} 个` : '',
       response.fallback_file_count ? `路径解析兜底 ${response.fallback_file_count} 个` : '',
     ].filter(Boolean).join('；')
     showNotice(response.message, directoryScanType.value)
   } catch (requestError) {
+    fullScanOpen.value = false
     saveError.value = getErrorMessage(requestError, '自定义目录扫描失败')
   } finally {
     scanningDirectories.value = false
@@ -605,8 +608,21 @@ function showNotice(text: string, color: 'success' | 'error' | 'warning'): void 
                     prepend-icon="mdi-folder-search-outline"
                     :loading="scanningDirectories"
                     :disabled="!canScanDirectories"
-                    @click="scanDirectoriesNow"
+                    @click="scanDirectoriesNow(false)"
                   >立即扫描并刮削</VBtn>
+                </span>
+              </template>
+            </VTooltip>
+            <VTooltip text="忽略扫描索引并重新处理全部媒体">
+              <template #activator="{ props: tooltipProps }">
+                <span v-bind="tooltipProps">
+                  <VBtn
+                    color="warning"
+                    variant="text"
+                    prepend-icon="mdi-database-refresh-outline"
+                    :disabled="!canScanDirectories"
+                    @click="fullScanOpen = true"
+                  >全部重扫</VBtn>
                 </span>
               </template>
             </VTooltip>
@@ -832,6 +848,17 @@ function showNotice(text: string, color: 'success' | 'error' | 'warning'): void 
     </form>
 
     <ConfirmDialog v-model="clearOpen" :title="clearTitle" :message="clearMessage" confirm-text="确认清除" :loading="clearing" @confirm="confirmClear" />
+    <ConfirmDialog
+      v-model="fullScanOpen"
+      title="重新扫描全部媒体"
+      message="将忽略已有扫描索引，把已保存目录内全部视频和 STRM 文件重新加入识别与字幕检查。已有标准简中字幕的目标会在任务预检时跳过；大型目录可能产生大量任务并需要较长时间。"
+      confirm-text="确认全部重扫"
+      confirm-color="warning"
+      confirm-icon="mdi-database-refresh-outline"
+      title-icon="mdi-database-refresh-outline"
+      :loading="scanningDirectories"
+      @confirm="scanDirectoriesNow(true)"
+    />
     <DirectoryPickerDialog v-model="directoryPickerOpen" :api="props.api" :initial-path="directoryPickerInitialPath" @select="selectDirectory" />
   </div>
 </template>

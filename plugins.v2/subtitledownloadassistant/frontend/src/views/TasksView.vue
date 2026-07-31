@@ -2,7 +2,7 @@
 import { computed, onBeforeUnmount, onMounted, ref, watch } from 'vue'
 import { useDisplay } from 'vuetify'
 
-import { clearTerminalTasks, deleteTask, getErrorMessage, getTask, listTasks, scanCustomDirectories } from '@/api/client'
+import { clearTerminalTasks, deleteTask, getErrorMessage, getTask, listTasks, retryTask, scanCustomDirectories } from '@/api/client'
 import ConfirmDialog from '@/components/ConfirmDialog.vue'
 import CopyValue from '@/components/CopyValue.vue'
 import DetailDrawer from '@/components/DetailDrawer.vue'
@@ -71,9 +71,13 @@ const openDetailPanels = ref<number[]>([0, 1])
 const deleteOpen = ref(false)
 const deleting = ref(false)
 const deleteTarget = ref<TaskListItem | null>(null)
+const retryOpen = ref(false)
+const retrying = ref(false)
+const retryTarget = ref<TaskListItem | null>(null)
 const clearTasksOpen = ref(false)
 const clearingTasks = ref(false)
 const scanOpen = ref(false)
+const scanMode = ref<'incremental' | 'full'>('incremental')
 const scanning = ref(false)
 const scanNotice = ref('')
 const scanNoticeType = ref<'success' | 'warning'>('success')
@@ -89,7 +93,7 @@ const isDesktop = computed(() => mdAndUp.value)
 const hasFilters = computed(() => Boolean(search.value || status.value))
 const totalPages = computed(() => Math.max(1, Math.ceil(total.value / pageSize.value)))
 const canLoadMore = computed(() => !isDesktop.value && items.value.length < total.value)
-const selectedListItem = computed(() => items.value.find(item => item.id === selectedId.value) || detail.value || deleteTarget.value)
+const selectedListItem = computed(() => items.value.find(item => item.id === selectedId.value) || detail.value || deleteTarget.value || retryTarget.value)
 
 watch(
   () => props.active,
@@ -271,6 +275,38 @@ function requestDelete(item: TaskListItem): void {
   deleteOpen.value = true
 }
 
+function canRetryTask(item: TaskListItem): boolean {
+  return item.status === 'skipped' || item.status === 'failed' || item.status === 'interrupted'
+}
+
+function requestRetry(item: TaskListItem): void {
+  if (!canRetryTask(item)) return
+  retryTarget.value = item
+  retryOpen.value = true
+}
+
+async function confirmRetryTask(): Promise<void> {
+  const target = retryTarget.value
+  if (!target) return
+  retrying.value = true
+  taskNotice.value = ''
+  try {
+    const response = await retryTask(props.api, props.pluginId, target.id)
+    retryOpen.value = false
+    retryTarget.value = null
+    if (selectedId.value === target.id) closeDetail()
+    page.value = 1
+    await loadPage({ silent: true, requestedPage: 1 })
+    taskNotice.value = response.message || '任务已重新提交'
+    emit('action')
+  } catch (requestError) {
+    retryOpen.value = false
+    staleError.value = getErrorMessage(requestError, '任务重新运行失败')
+  } finally {
+    retrying.value = false
+  }
+}
+
 async function confirmDelete(): Promise<void> {
   const target = deleteTarget.value
   if (!target) return
@@ -317,13 +353,14 @@ async function confirmDirectoryScan(): Promise<void> {
   scanning.value = true
   scanNotice.value = ''
   try {
-    const response = await scanCustomDirectories(props.api, props.pluginId)
+    const full = scanMode.value === 'full'
+    const response = await scanCustomDirectories(props.api, props.pluginId, { full })
     scanOpen.value = false
     scanNoticeType.value = response.fallback_file_count > 0 ? 'warning' : 'success'
     scanNotice.value = [
       response.message,
       `目录文件 ${response.indexed_file_count} 个`,
-      `未变更已跳过 ${response.unchanged_count} 个`,
+      full ? `全量目标 ${response.changed_count} 个` : `未变更已跳过 ${response.unchanged_count} 个`,
       `本次处理 ${response.matched_count} 个`,
       response.retry_count ? `重试失败项 ${response.retry_count} 个` : '',
       `整理历史匹配 ${response.history_matched_count} 个`,
@@ -339,6 +376,11 @@ async function confirmDirectoryScan(): Promise<void> {
   } finally {
     scanning.value = false
   }
+}
+
+function requestDirectoryScan(mode: 'incremental' | 'full'): void {
+  scanMode.value = mode
+  scanOpen.value = true
 }
 
 function clearFilters(): void {
@@ -444,14 +486,34 @@ function sourceRunRejectionSummary(run: SourceRun): string {
               />
             </template>
           </VTooltip>
-          <VBtn
-            color="primary"
-            variant="tonal"
-            size="small"
-            prepend-icon="mdi-folder-search-outline"
-            :loading="scanning"
-            @click="scanOpen = true"
-          >扫描目录</VBtn>
+          <VMenu>
+            <template #activator="{ props: menuProps }">
+              <VBtn
+                v-bind="menuProps"
+                color="primary"
+                variant="tonal"
+                size="small"
+                prepend-icon="mdi-folder-search-outline"
+                append-icon="mdi-chevron-down"
+                :loading="scanning"
+              >扫描目录</VBtn>
+            </template>
+            <VList density="compact" min-width="250">
+              <VListItem
+                title="增量扫描"
+                subtitle="仅处理新增、变更和失败项"
+                prepend-icon="mdi-folder-search-outline"
+                @click="requestDirectoryScan('incremental')"
+              />
+              <VListItem
+                title="重新扫描全部"
+                subtitle="忽略历史索引，重新处理全部文件"
+                prepend-icon="mdi-database-refresh-outline"
+                base-color="warning"
+                @click="requestDirectoryScan('full')"
+              />
+            </VList>
+          </VMenu>
           <VTooltip text="刷新任务">
             <template #activator="{ props: tooltipProps }">
               <VBtn
@@ -588,6 +650,11 @@ function sourceRunRejectionSummary(run: SourceRun): string {
                       <VBtn v-bind="tooltipProps" icon="mdi-chevron-right" size="small" variant="text" aria-label="查看任务详情" @click="openDetail(item)" />
                     </template>
                   </VTooltip>
+                  <VTooltip v-if="canRetryTask(item)" text="重新运行任务">
+                    <template #activator="{ props: tooltipProps }">
+                      <VBtn v-bind="tooltipProps" icon="mdi-restart" size="small" variant="text" color="primary" aria-label="重新运行任务" @click="requestRetry(item)" />
+                    </template>
+                  </VTooltip>
                   <VTooltip v-if="isTerminalTask(item.status)" text="删除任务记录">
                     <template #activator="{ props: tooltipProps }">
                       <VBtn v-bind="tooltipProps" icon="mdi-delete-outline" size="small" variant="text" color="error" aria-label="删除任务记录" @click="requestDelete(item)" />
@@ -630,6 +697,7 @@ function sourceRunRejectionSummary(run: SourceRun): string {
                 </template>
                 <VList density="compact" role="menu" aria-label="任务操作">
                   <VListItem role="menuitem" title="查看详情" prepend-icon="mdi-text-box-search-outline" @click="openDetail(item)" />
+                  <VListItem v-if="canRetryTask(item)" role="menuitem" title="重新运行" prepend-icon="mdi-restart" base-color="primary" @click="requestRetry(item)" />
                   <VListItem role="menuitem" title="删除任务记录" prepend-icon="mdi-delete-outline" base-color="error" @click="requestDelete(item)" />
                 </VList>
               </VMenu>
@@ -657,6 +725,11 @@ function sourceRunRejectionSummary(run: SourceRun): string {
         @update:model-value="updateDetailOpen"
       >
         <template #actions>
+          <VTooltip v-if="selectedListItem && canRetryTask(selectedListItem)" text="重新运行任务">
+            <template #activator="{ props: tooltipProps }">
+              <VBtn v-bind="tooltipProps" icon="mdi-restart" color="primary" variant="text" aria-label="重新运行任务" @click="requestRetry(selectedListItem)" />
+            </template>
+          </VTooltip>
           <VTooltip v-if="selectedListItem && isTerminalTask(selectedListItem.status)" text="删除任务记录">
             <template #activator="{ props: tooltipProps }">
               <VBtn v-bind="tooltipProps" icon="mdi-delete-outline" color="error" variant="text" aria-label="删除任务记录" @click="requestDelete(selectedListItem)" />
@@ -829,12 +902,14 @@ function sourceRunRejectionSummary(run: SourceRun): string {
 
     <ConfirmDialog
       v-model="scanOpen"
-      title="增量扫描自定义媒体目录"
-      message="将递归检查当前已保存目录，未变更的历史文件会直接跳过；只有新增、变更或上次处理失败的目标会进入自动字幕队列。"
-      confirm-text="开始扫描"
-      confirm-color="primary"
-      confirm-icon="mdi-folder-search-outline"
-      title-icon="mdi-folder-search-outline"
+      :title="scanMode === 'full' ? '重新扫描全部媒体' : '增量扫描自定义媒体目录'"
+      :message="scanMode === 'full'
+        ? '将忽略已有扫描索引，把当前目录内全部视频和 STRM 文件重新加入识别与字幕检查。已有标准简中字幕的目标会在任务预检时跳过；大型目录可能产生大量任务并需要较长时间。'
+        : '将递归检查当前已保存目录，未变更的历史文件会直接跳过；只有新增、变更或上次处理失败的目标会进入自动字幕队列。'"
+      :confirm-text="scanMode === 'full' ? '确认全部重扫' : '开始扫描'"
+      :confirm-color="scanMode === 'full' ? 'warning' : 'primary'"
+      :confirm-icon="scanMode === 'full' ? 'mdi-database-refresh-outline' : 'mdi-folder-search-outline'"
+      :title-icon="scanMode === 'full' ? 'mdi-database-refresh-outline' : 'mdi-folder-search-outline'"
       :loading="scanning"
       @confirm="confirmDirectoryScan"
     />
@@ -856,6 +931,17 @@ function sourceRunRejectionSummary(run: SourceRun): string {
       message="只会删除这条终态任务历史，不会删除匹配记录、插件数据文件或媒体目录中的字幕。此操作无法撤销。"
       :loading="deleting"
       @confirm="confirmDelete"
+    />
+
+    <ConfirmDialog
+      v-model="retryOpen"
+      title="重新运行任务"
+      :message="`将保留原任务记录，并根据“${retryTarget?.target_file_name || '当前媒体'}”的媒体信息和文件路径创建一条新任务。若同路径任务已在运行，将自动合并。`"
+      confirm-text="重新提交"
+      confirm-icon="mdi-restart"
+      title-icon="mdi-restart"
+      :loading="retrying"
+      @confirm="confirmRetryTask"
     />
   </section>
 </template>

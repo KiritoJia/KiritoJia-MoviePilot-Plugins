@@ -119,7 +119,7 @@ class TaskClearResponse(ApiModel):
 
 
 class CustomDirectoryScanResponse(ApiModel):
-    """一次自定义媒体目录增量扫描的提交摘要。"""
+    """一次自定义媒体目录增量或全量扫描的提交摘要。"""
 
     success: bool = True
     message: str

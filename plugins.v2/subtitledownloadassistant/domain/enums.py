@@ -20,6 +20,7 @@ class TaskTrigger(StrEnum):
     TRANSFER_EVENT = "transfer_event"
     CUSTOM_DIRECTORY_SCAN = "custom_directory_scan"
     MANUAL_CANDIDATE = "manual_candidate"
+    RETRY = "retry"
 
 
 class TaskStage(StrEnum):

@@ -84,6 +84,7 @@ TRIGGER_NAMES = {
     TaskTrigger.TRANSFER_EVENT: "媒体整理事件",
     TaskTrigger.CUSTOM_DIRECTORY_SCAN: "自定义目录扫描",
     TaskTrigger.MANUAL_CANDIDATE: "人工选择字幕",
+    TaskTrigger.RETRY: "任务重新运行",
 }
 
 STAGE_NAMES = {
