@@ -134,6 +134,19 @@ export interface TaskClearResponse {
   active_count: number
 }
 
+export interface TaskBatchRetryResponse {
+  success: boolean
+  message: string
+  requested_count: number
+  matched_count: number
+  eligible_count: number
+  submitted_count: number
+  merged_count: number
+  skipped_count: number
+  missing_count: number
+  error_count: number
+}
+
 export interface StageTrace {
   stage: TaskStage
   started_at: string

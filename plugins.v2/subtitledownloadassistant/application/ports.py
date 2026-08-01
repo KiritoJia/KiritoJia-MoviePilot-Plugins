@@ -114,6 +114,9 @@ class StorePort(Protocol):
     async def save_task(self, task: SubtitleTask) -> None:
         """新增或更新任务并应用保留规则。"""
 
+    async def save_tasks(self, tasks: list[SubtitleTask]) -> None:
+        """一次持久化新增或更新一批任务。"""
+
     async def delete_task(self, task_id: str) -> bool:
         """删除指定任务。"""
 

@@ -383,3 +383,54 @@ def test_store_clears_only_terminal_tasks() -> None:
         enums.TaskStatus.PROCESSING,
     }
     assert len(plugin.data["tasks"]["items"]) == 2
+
+
+def test_store_preserves_unrecovered_service_interruptions_during_bulk_save() -> None:
+    store_class = _load_store_class()
+    enums = sys.modules["subtitledownloadassistant_store_test.domain.enums"]
+    models = sys.modules["subtitledownloadassistant_store_test.domain.models"]
+
+    class FakePlugin:
+        def __init__(self) -> None:
+            self.data: dict[str, object] = {}
+
+        def get_data(self, key):
+            return self.data.get(key)
+
+        def save_data(self, key, value):
+            self.data[key] = value
+
+        async def async_save_data(self, key, value):
+            self.data[key] = value
+
+    plugin = FakePlugin()
+    store = store_class(plugin)
+    store.initialize()
+    interrupted = [
+        models.SubtitleTask(
+            id=f"interrupted-{index}",
+            media_title=f"媒体 {index}",
+            target_file_name=f"media-{index}.strm",
+            target_path=f"/media/media-{index}.strm",
+            status=enums.TaskStatus.INTERRUPTED,
+            reason_code="service_interrupted",
+            reason_message="服务重启前未完成",
+        )
+        for index in range(600)
+    ]
+
+    asyncio.run(store.save_tasks(interrupted))
+    resumed = interrupted[0].model_copy(
+        deep=True,
+        update={
+            "status": enums.TaskStatus.QUEUED,
+            "reason_code": None,
+            "reason_message": None,
+        },
+    )
+    asyncio.run(store.save_tasks([resumed]))
+
+    remaining = store.list_tasks_sync()
+    assert len(remaining) == 600
+    assert sum(task.status is enums.TaskStatus.INTERRUPTED for task in remaining) == 599
+    assert sum(task.status is enums.TaskStatus.QUEUED for task in remaining) == 1

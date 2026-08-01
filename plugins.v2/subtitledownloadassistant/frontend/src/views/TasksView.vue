@@ -2,7 +2,7 @@
 import { computed, onBeforeUnmount, onMounted, ref, watch } from 'vue'
 import { useDisplay } from 'vuetify'
 
-import { clearTerminalTasks, deleteTask, getErrorMessage, getTask, listTasks, retryTask, scanCustomDirectories } from '@/api/client'
+import { clearTerminalTasks, deleteTask, getErrorMessage, getTask, listTasks, retryTask, retryTasksBatch, scanCustomDirectories } from '@/api/client'
 import ConfirmDialog from '@/components/ConfirmDialog.vue'
 import CopyValue from '@/components/CopyValue.vue'
 import DetailDrawer from '@/components/DetailDrawer.vue'
@@ -74,6 +74,10 @@ const deleteTarget = ref<TaskListItem | null>(null)
 const retryOpen = ref(false)
 const retrying = ref(false)
 const retryTarget = ref<TaskListItem | null>(null)
+const selectedTaskIds = ref<Set<string>>(new Set())
+const batchRetryOpen = ref(false)
+const batchRetrying = ref(false)
+const batchRetryScope = ref<'selected' | 'all'>('selected')
 const clearTasksOpen = ref(false)
 const clearingTasks = ref(false)
 const scanOpen = ref(false)
@@ -94,6 +98,24 @@ const hasFilters = computed(() => Boolean(search.value || status.value))
 const totalPages = computed(() => Math.max(1, Math.ceil(total.value / pageSize.value)))
 const canLoadMore = computed(() => !isDesktop.value && items.value.length < total.value)
 const selectedListItem = computed(() => items.value.find(item => item.id === selectedId.value) || detail.value || deleteTarget.value || retryTarget.value)
+const pageInterruptedItems = computed(() => items.value.filter(item => item.status === 'interrupted'))
+const selectedTaskCount = computed(() => selectedTaskIds.value.size)
+const allPageInterruptedSelected = computed(() => (
+  pageInterruptedItems.value.length > 0
+  && pageInterruptedItems.value.every(item => selectedTaskIds.value.has(item.id))
+))
+const somePageInterruptedSelected = computed(() => (
+  pageInterruptedItems.value.some(item => selectedTaskIds.value.has(item.id))
+  && !allPageInterruptedSelected.value
+))
+const batchRetryMessage = computed(() => {
+  if (batchRetryScope.value === 'selected') {
+    return `将让选中的 ${selectedTaskCount.value} 条已中断任务回到等待队列并重新开始。原中断运行轨迹会重置，媒体信息、目标路径和任务 ID 保留。`
+  }
+  const scope = search.value ? `搜索“${search.value}”命中的` : '当前任务库中的'
+  const count = status.value === 'interrupted' ? ` ${total.value} 条` : ''
+  return `将恢复${scope}${count}已中断任务。任务会按现有并发上限排队执行，不会同时请求全部字幕源；原中断运行轨迹会重置。`
+})
 
 watch(
   () => props.active,
@@ -109,6 +131,7 @@ watch(
 )
 
 watch([search, status], () => {
+  clearTaskSelection()
   scrollTableToTop()
   page.value = 1
   items.value = []
@@ -117,6 +140,7 @@ watch([search, status], () => {
 
 watch(pageSize, () => {
   if (!isDesktop.value) return
+  clearTaskSelection()
   scrollTableToTop()
   page.value = 1
   if (props.active) void loadPage({ requestedPage: 1 })
@@ -124,11 +148,13 @@ watch(pageSize, () => {
 
 watch(page, next => {
   if (!isDesktop.value || !props.active) return
+  clearTaskSelection()
   scrollTableToTop()
   void loadPage({ requestedPage: next })
 })
 
 watch(isDesktop, () => {
+  clearTaskSelection()
   page.value = 1
   items.value = []
   if (props.active) void loadPage({ requestedPage: 1 })
@@ -283,6 +309,56 @@ function requestRetry(item: TaskListItem): void {
   if (!canRetryTask(item)) return
   retryTarget.value = item
   retryOpen.value = true
+}
+
+function clearTaskSelection(): void {
+  selectedTaskIds.value = new Set()
+}
+
+function setTaskSelected(taskId: string, selected: boolean): void {
+  const next = new Set(selectedTaskIds.value)
+  if (selected) next.add(taskId)
+  else next.delete(taskId)
+  selectedTaskIds.value = next
+}
+
+function togglePageInterrupted(selected: boolean): void {
+  const next = new Set(selectedTaskIds.value)
+  for (const item of pageInterruptedItems.value) {
+    if (selected) next.add(item.id)
+    else next.delete(item.id)
+  }
+  selectedTaskIds.value = next
+}
+
+function requestBatchRetry(scope: 'selected' | 'all'): void {
+  if (scope === 'selected' && !selectedTaskCount.value) return
+  batchRetryScope.value = scope
+  batchRetryOpen.value = true
+}
+
+async function confirmBatchRetry(): Promise<void> {
+  const scope = batchRetryScope.value
+  const taskIds = [...selectedTaskIds.value]
+  if (scope === 'selected' && !taskIds.length) return
+  batchRetrying.value = true
+  taskNotice.value = ''
+  try {
+    const response = await retryTasksBatch(props.api, props.pluginId, scope === 'selected'
+      ? { taskIds }
+      : { allInterrupted: true, search: search.value })
+    batchRetryOpen.value = false
+    clearTaskSelection()
+    page.value = 1
+    await loadPage({ silent: true, requestedPage: 1 })
+    taskNotice.value = response.message
+    emit('action')
+  } catch (requestError) {
+    batchRetryOpen.value = false
+    staleError.value = getErrorMessage(requestError, '批量恢复任务失败')
+  } finally {
+    batchRetrying.value = false
+  }
 }
 
 async function confirmRetryTask(): Promise<void> {
@@ -471,6 +547,33 @@ function sourceRunRejectionSummary(run: SourceRun): string {
           <h2 id="tasks-view-title">任务</h2>
         </div>
         <div class="header-actions">
+          <VTooltip v-if="status === '' || status === 'interrupted'" text="恢复当前搜索范围内的全部已中断任务">
+            <template #activator="{ props: tooltipProps }">
+              <VBtn
+                v-if="isDesktop"
+                v-bind="tooltipProps"
+                prepend-icon="mdi-restart-alert"
+                size="small"
+                variant="tonal"
+                color="primary"
+                :disabled="loading || batchRetrying || (status === 'interrupted' && total === 0)"
+                :loading="batchRetrying"
+                @click="requestBatchRetry('all')"
+              >恢复中断</VBtn>
+              <VBtn
+                v-else
+                v-bind="tooltipProps"
+                icon="mdi-restart-alert"
+                size="small"
+                variant="text"
+                color="primary"
+                :disabled="loading || batchRetrying || (status === 'interrupted' && total === 0)"
+                :loading="batchRetrying"
+                aria-label="恢复全部已中断任务"
+                @click="requestBatchRetry('all')"
+              />
+            </template>
+          </VTooltip>
           <VTooltip text="清理全部已结束任务">
             <template #activator="{ props: tooltipProps }">
               <VBtn
@@ -544,6 +647,24 @@ function sourceRunRejectionSummary(run: SourceRun): string {
       </div>
     </div>
 
+    <div v-if="isDesktop && selectedTaskCount" class="batch-action-bar" role="status">
+      <div class="batch-action-bar__summary">
+        <VIcon icon="mdi-checkbox-marked-circle-outline" size="19" color="primary" />
+        <span>已选择 {{ selectedTaskCount }} 条中断任务</span>
+      </div>
+      <div class="batch-action-bar__actions">
+        <VBtn size="small" variant="text" color="default" @click="clearTaskSelection">取消选择</VBtn>
+        <VBtn
+          size="small"
+          variant="flat"
+          color="primary"
+          prepend-icon="mdi-restart"
+          :loading="batchRetrying"
+          @click="requestBatchRetry('selected')"
+        >恢复选中任务</VBtn>
+      </div>
+    </div>
+
     <VAlert v-if="staleError" type="warning" variant="tonal" density="compact" class="mb-3">
       <div class="inline-alert">
         <span>刷新失败，当前数据可能已过期：{{ staleError }}</span>
@@ -604,6 +725,17 @@ function sourceRunRejectionSummary(run: SourceRun): string {
           <VTable hover fixed-header height="100%" class="data-table">
             <thead>
               <tr>
+                <th class="selection-column" @click.stop>
+                  <VCheckboxBtn
+                    :model-value="allPageInterruptedSelected"
+                    :indeterminate="somePageInterruptedSelected"
+                    :disabled="!pageInterruptedItems.length"
+                    density="compact"
+                    color="primary"
+                    aria-label="选择本页全部已中断任务"
+                    @update:model-value="value => togglePageInterrupted(Boolean(value))"
+                  />
+                </th>
                 <th>媒体</th>
                 <th>目标文件</th>
                 <th>状态</th>
@@ -627,6 +759,16 @@ function sourceRunRejectionSummary(run: SourceRun): string {
                 @keydown.enter.prevent="openDetail(item)"
                 @keydown.space.prevent="openDetail(item)"
               >
+                <td class="selection-column" @click.stop @keydown.stop>
+                  <VCheckboxBtn
+                    :model-value="selectedTaskIds.has(item.id)"
+                    :disabled="item.status !== 'interrupted'"
+                    density="compact"
+                    color="primary"
+                    :aria-label="`选择任务 ${item.target_file_name}`"
+                    @update:model-value="value => setTaskSelected(item.id, Boolean(value))"
+                  />
+                </td>
                 <td>
                   <div class="primary-cell">
                     <VIcon :icon="item.media_type === 'movie' ? 'mdi-movie-outline' : 'mdi-television-classic'" size="18" />
@@ -943,6 +1085,18 @@ function sourceRunRejectionSummary(run: SourceRun): string {
       :loading="retrying"
       @confirm="confirmRetryTask"
     />
+
+    <ConfirmDialog
+      v-model="batchRetryOpen"
+      :title="batchRetryScope === 'selected' ? '恢复选中任务' : '恢复全部已中断任务'"
+      :message="batchRetryMessage"
+      :confirm-text="batchRetryScope === 'selected' ? '恢复选中任务' : '确认全部恢复'"
+      confirm-color="primary"
+      confirm-icon="mdi-restart"
+      title-icon="mdi-restart-alert"
+      :loading="batchRetrying"
+      @confirm="confirmBatchRetry"
+    />
   </section>
 </template>
 
@@ -964,6 +1118,20 @@ function sourceRunRejectionSummary(run: SourceRun): string {
 .header-actions { display: flex; flex: 0 0 auto; align-items: center; gap: 0.25rem; }
 .filter-bar { display: grid; grid-template-columns: minmax(15rem, 1fr) minmax(10rem, 14rem); gap: 0.75rem; }
 .inline-alert { display: flex; align-items: center; justify-content: space-between; gap: 1rem; }
+.batch-action-bar {
+  display: flex;
+  min-height: 3rem;
+  align-items: center;
+  justify-content: space-between;
+  gap: 1rem;
+  margin-block-end: 0.75rem;
+  padding: 0.5rem 0.75rem;
+  border: 1px solid rgba(var(--v-theme-primary), 0.28);
+  border-radius: 0.375rem;
+  background: rgba(var(--v-theme-primary), 0.08);
+}
+.batch-action-bar__summary, .batch-action-bar__actions { display: flex; align-items: center; gap: 0.5rem; }
+.batch-action-bar__summary { color: rgb(var(--v-theme-on-surface)); font-size: 0.8125rem; font-weight: 600; }
 .master-detail, .master-pane { min-width: 0; }
 .table-frame { overflow: hidden; border: 1px solid rgba(var(--v-border-color), var(--v-border-opacity)); border-radius: 0.375rem; background: rgb(var(--v-theme-surface)); }
 .table-frame :deep(.v-table__wrapper) { overscroll-behavior: contain; scrollbar-gutter: stable; }
@@ -979,6 +1147,7 @@ function sourceRunRejectionSummary(run: SourceRun): string {
 .file-name { display: block; max-width: 14rem; overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
 .result-text { display: -webkit-box; max-width: 18rem; overflow: hidden; -webkit-box-orient: vertical; -webkit-line-clamp: 2; font-size: 0.8125rem; }
 .time-text { display: block; min-width: 9rem; line-height: 1.45; }
+.selection-column { width: 2.75rem; padding-inline: 0.5rem !important; }
 .actions-column { width: 6.5rem; text-align: end !important; white-space: nowrap; }
 .pagination-bar { display: grid; grid-template-columns: auto 1fr 7rem; align-items: center; gap: 1rem; padding: 0.75rem 0; color: rgba(var(--v-theme-on-surface), var(--v-medium-emphasis-opacity)); font-size: 0.8125rem; }
 .table-pagination { justify-self: center; }

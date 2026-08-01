@@ -21,6 +21,7 @@ import type {
   SubtitleSource,
   TargetItem,
   TaskDetail,
+  TaskBatchRetryResponse,
   TaskClearResponse,
   TaskListItem,
   TaskStatus,
@@ -115,6 +116,20 @@ export async function deleteTask(api: PluginApi, pluginId: string, taskId: strin
 export async function retryTask(api: PluginApi, pluginId: string, taskId: string): Promise<StandardResponse> {
   const response = await api.post<StandardResponse>(pluginPath(pluginId, `tasks/${encodeURIComponent(taskId)}/retry`))
   return requireSuccess(response, '任务重新运行失败')
+}
+
+export async function retryTasksBatch(
+  api: PluginApi,
+  pluginId: string,
+  options: { taskIds?: string[]; allInterrupted?: boolean; search?: string },
+): Promise<TaskBatchRetryResponse> {
+  const response = await api.post<TaskBatchRetryResponse>(pluginPath(pluginId, 'tasks/retry-batch'), {
+    task_ids: options.taskIds || [],
+    all_interrupted: Boolean(options.allInterrupted),
+    search: options.search?.trim() || null,
+  })
+  if (!response?.success) throw new Error(responseMessage(response) || '批量恢复任务失败')
+  return response
 }
 
 export async function clearTerminalTasks(

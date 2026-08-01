@@ -112,6 +112,31 @@ function seedState(): MockState {
       trigger: 'transfer_event',
     },
     {
+      id: 'task-interrupted',
+      media_title: '重启前排队的影片',
+      year: 2020,
+      media_type: 'movie',
+      season: null,
+      episode: null,
+      target_file_name: 'Interrupted.Movie.2020.2160p.strm',
+      target_path: '/media/电影/重启前排队的影片/Interrupted.Movie.2020.2160p.strm',
+      target_history_id: null,
+      history_target_path: '/media/电影/重启前排队的影片/Interrupted.Movie.2020.2160p.strm',
+      status: 'interrupted',
+      stage: null,
+      reason_code: 'service_interrupted',
+      reason_message: '任务在服务重启前未完成，已中断且不会自动恢复',
+      result_source: null,
+      result_package_scope: null,
+      result_format: null,
+      created_at: iso(900_000),
+      started_at: null,
+      finished_at: iso(840_000),
+      duration_ms: 60_000,
+      warning_count: 0,
+      trigger: 'custom_directory_scan',
+    },
+    {
       id: 'task-failed',
       media_title: '未找到字幕的电影',
       year: 2021,
@@ -359,6 +384,49 @@ export function createMockApi() {
           retry_count: 0,
           removed_count: 0,
         } satisfies CustomDirectoryScanResponse as T
+      }
+      if (path.endsWith('/tasks/retry-batch')) {
+        const request = payload as { task_ids?: string[]; all_interrupted?: boolean; search?: string | null }
+        const selectedIds = new Set(request.task_ids || [])
+        const query = (request.search || '').trim().toLocaleLowerCase()
+        const matched = state.tasks.filter(task => (
+          task.status === 'interrupted'
+          && (
+            selectedIds.has(task.id)
+            || (
+              request.all_interrupted
+              && (!query || `${task.media_title} ${task.target_file_name} ${task.reason_message || ''}`.toLocaleLowerCase().includes(query))
+            )
+          )
+        ))
+        for (const task of matched) {
+          Object.assign(task, {
+            status: 'queued',
+            trigger: 'retry',
+            stage: null,
+            reason_code: null,
+            reason_message: null,
+            started_at: null,
+            finished_at: null,
+            duration_ms: null,
+          })
+          if (state.taskDetails[task.id]) Object.assign(state.taskDetails[task.id], clone(task))
+        }
+        const missingCount = request.all_interrupted ? 0 : Math.max(0, selectedIds.size - matched.length)
+        return {
+          success: true,
+          message: matched.length
+            ? `已恢复 ${matched.length} 条中断任务并加入受限队列`
+            : '没有新的中断任务需要加入队列',
+          requested_count: request.all_interrupted ? matched.length : selectedIds.size,
+          matched_count: matched.length,
+          eligible_count: matched.length,
+          submitted_count: matched.length,
+          merged_count: 0,
+          skipped_count: 0,
+          missing_count: missingCount,
+          error_count: 0,
+        } as T
       }
       if (/\/tasks\/[^/]+\/retry$/.test(path)) {
         return {

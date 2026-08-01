@@ -118,6 +118,39 @@ class TaskClearResponse(ApiModel):
     active_count: int = Field(ge=0)
 
 
+class TaskBatchRetryRequest(ApiModel):
+    """按显式任务 ID 或当前搜索条件恢复已中断任务。"""
+
+    task_ids: list[str] = Field(default_factory=list, max_length=100)
+    all_interrupted: bool = False
+    search: str | None = Field(default=None, max_length=500)
+
+    @model_validator(mode="after")
+    def validate_scope(self) -> "TaskBatchRetryRequest":
+        """要求显式选择与全部中断范围二选一。"""
+
+        if self.all_interrupted == bool(self.task_ids):
+            raise ValueError("必须选择任务 ID，或指定恢复全部已中断任务")
+        if len(self.task_ids) != len(set(self.task_ids)):
+            raise ValueError("同一任务不能重复提交")
+        return self
+
+
+class TaskBatchRetryResponse(ApiModel):
+    """一次批量恢复已中断任务的提交摘要。"""
+
+    success: bool = True
+    message: str
+    requested_count: int = Field(ge=0)
+    matched_count: int = Field(ge=0)
+    eligible_count: int = Field(ge=0)
+    submitted_count: int = Field(ge=0)
+    merged_count: int = Field(ge=0)
+    skipped_count: int = Field(ge=0)
+    missing_count: int = Field(ge=0)
+    error_count: int = Field(ge=0)
+
+
 class CustomDirectoryScanResponse(ApiModel):
     """一次自定义媒体目录增量或全量扫描的提交摘要。"""
 

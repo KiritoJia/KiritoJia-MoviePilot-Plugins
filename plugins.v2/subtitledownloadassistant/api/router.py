@@ -55,6 +55,8 @@ from .schemas import (
     SourceStatusItem,
     TargetListItem,
     TargetPage,
+    TaskBatchRetryRequest,
+    TaskBatchRetryResponse,
     TaskDetail,
     TaskClearResponse,
     TaskListItem,
@@ -313,6 +315,91 @@ class ApiController:
             success=True,
             message="已重新提交任务；同路径已有运行任务时将自动合并",
             data={"task_id": new_task_id, "original_task_id": task.id},
+        )
+
+    async def retry_tasks_batch(
+        self,
+        payload: TaskBatchRetryRequest = Body(...),  # noqa: B008 - FastAPI 请求体注入
+        _: User = Depends(get_current_active_manage_user_async),  # noqa: B008 - FastAPI 依赖注入
+    ) -> TaskBatchRetryResponse:
+        """原地恢复选中或符合搜索条件的已中断任务。"""
+
+        if self._plugin.targets is None or self._plugin.coordinator is None:
+            raise HTTPException(status_code=409, detail="字幕下载助手当前未启用")
+
+        tasks = await self._plugin.store.list_tasks()
+        missing_count = 0
+        if payload.all_interrupted:
+            query = (payload.search or "").strip().casefold()
+            matched = [
+                task
+                for task in tasks
+                if task.status is TaskStatus.INTERRUPTED
+                and (not query or query in self._task_search_text(task))
+            ]
+            matched.sort(
+                key=lambda task: self._timestamp(task.finished_at or task.created_at),
+                reverse=True,
+            )
+            requested_count = len(matched)
+        else:
+            tasks_by_id = {task.id: task for task in tasks}
+            matched = [tasks_by_id[task_id] for task_id in payload.task_ids if task_id in tasks_by_id]
+            missing_count = len(payload.task_ids) - len(matched)
+            requested_count = len(payload.task_ids)
+
+        eligible = [task for task in matched if task.status is TaskStatus.INTERRUPTED]
+        skipped_count = len(matched) - len(eligible)
+        entries: list[tuple[SubtitleTask, TaskWorkItem]] = []
+        error_count = 0
+        for task in eligible:
+            try:
+                target = self._plugin.targets.retry_target(task)
+                entries.append(
+                    (
+                        task,
+                        TaskWorkItem(
+                            context=target.context,
+                            target=target.target_item,
+                            host_mediainfo=target.host_mediainfo,
+                            trigger=TaskTrigger.RETRY,
+                            history_target_path=target.history_target_path,
+                            target_history_id=target.history_id,
+                        ),
+                    )
+                )
+            except (OSError, TypeError, ValueError, ValidationError):
+                error_count += 1
+
+        result = await self._plugin.coordinator.resume_interrupted(entries)
+        if entries and not result.accepting:
+            raise HTTPException(status_code=409, detail="插件正在停止，暂时不能恢复任务")
+
+        submitted_count = len(result.resumed_task_ids)
+        parts: list[str] = []
+        if submitted_count:
+            parts.append(f"已恢复 {submitted_count} 条中断任务并加入受限队列")
+        else:
+            parts.append("没有新的中断任务需要加入队列")
+        if result.merged_count:
+            parts.append(f"同路径运行任务合并 {result.merged_count} 条")
+        if skipped_count:
+            parts.append(f"状态已变化跳过 {skipped_count} 条")
+        if missing_count:
+            parts.append(f"任务不存在 {missing_count} 条")
+        if error_count:
+            parts.append(f"目标重建失败 {error_count} 条")
+
+        return TaskBatchRetryResponse(
+            message="；".join(parts),
+            requested_count=requested_count,
+            matched_count=len(matched),
+            eligible_count=len(eligible),
+            submitted_count=submitted_count,
+            merged_count=result.merged_count,
+            skipped_count=skipped_count,
+            missing_count=missing_count,
+            error_count=error_count,
         )
 
     async def list_records(
@@ -877,6 +964,13 @@ class ApiController:
                 ["POST"],
                 CustomDirectoryScanResponse,
                 "扫描或全量重新扫描自定义媒体目录",
+            ),
+            (
+                "/tasks/retry-batch",
+                self.retry_tasks_batch,
+                ["POST"],
+                TaskBatchRetryResponse,
+                "批量恢复已中断字幕任务",
             ),
             ("/tasks/{task_id}/retry", self.retry_task, ["POST"], Response, "重新运行终态字幕任务"),
             ("/tasks/{task_id}", self.get_task, ["GET"], TaskDetail, "查询字幕任务详情"),

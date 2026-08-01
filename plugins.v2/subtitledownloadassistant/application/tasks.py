@@ -168,6 +168,15 @@ class TaskWorkItem:
     task_id: str | None = None
 
 
+@dataclass(frozen=True, slots=True)
+class TaskBatchResumeResult:
+    """批量恢复任务写入受限队列后的结果。"""
+
+    resumed_task_ids: tuple[str, ...] = ()
+    merged_count: int = 0
+    accepting: bool = True
+
+
 @dataclass(slots=True)
 class AttributedSubtitle:
     """运行期物理字幕文件及其持久化归属证据。"""
@@ -387,6 +396,85 @@ class TaskCoordinator:
             await self._queue.put(item)
             self._ensure_worker()
             return task.id
+
+    async def resume_interrupted(
+        self,
+        entries: list[tuple[SubtitleTask, TaskWorkItem]],
+    ) -> TaskBatchResumeResult:
+        """一次持久化恢复中断任务，并交由既有受限 worker 池处理。"""
+
+        if not self._accepting:
+            return TaskBatchResumeResult(accepting=False)
+        if not entries:
+            return TaskBatchResumeResult()
+
+        resumed: list[tuple[SubtitleTask, TaskWorkItem, str]] = []
+        merged_count = 0
+        async with self._lock:
+            if not self._accepting:
+                return TaskBatchResumeResult(accepting=False)
+            reserved_paths = set(self._active_paths)
+            for original, item in entries:
+                key = self._path_key(item.context.target_path)
+                if key in reserved_paths:
+                    merged_count += 1
+                    continue
+                reserved_paths.add(key)
+                resumed_task = original.model_copy(
+                    deep=True,
+                    update={
+                        "trigger": TaskTrigger.RETRY,
+                        "package_attribution_strategy": self.config.package_attribution_strategy,
+                        "status": TaskStatus.QUEUED,
+                        "stage": None,
+                        "reason_code": None,
+                        "reason_message": None,
+                        "result_source": None,
+                        "result_package_scope": None,
+                        "result_format": None,
+                        "created_at": utc_now(),
+                        "started_at": None,
+                        "finished_at": None,
+                        "duration_ms": None,
+                        "warning_count": 0,
+                        "warning_summaries": [],
+                        "matched_path_mapping": None,
+                        "target_file_exists": None,
+                        "candidate_attribution_snapshot": None,
+                        "existing_subtitle_check": {},
+                        "inventory_result": {},
+                        "stage_traces": [],
+                        "source_runs": [],
+                        "candidate_attempts": [],
+                        "final_subtitle_path": None,
+                        "record_ids": [],
+                        "record_counts": {},
+                        "manual_source": None,
+                        "manual_candidate_key": None,
+                        "manual_candidate_summary": {},
+                        "actual_search_query": None,
+                    },
+                )
+                item.task_id = resumed_task.id
+                resumed.append((resumed_task, item, key))
+
+            if resumed:
+                await self.store.save_tasks([task for task, _item, _key in resumed])
+                for task, item, key in resumed:
+                    self._active_paths[key] = task.id
+                    self._active_items[task.id] = item
+                    self._queue.put_nowait(item)
+                self._ensure_worker()
+
+        if resumed:
+            logger.info(
+                f"已批量恢复 {len(resumed)} 条中断字幕任务并加入受限队列，"
+                f"同路径合并 {merged_count} 条"
+            )
+        return TaskBatchResumeResult(
+            resumed_task_ids=tuple(task.id for task, _item, _key in resumed),
+            merged_count=merged_count,
+        )
 
     async def enqueue_manual(self, item: TaskWorkItem) -> tuple[str | None, bool]:
         """把用户选定候选提交到 worker 池，并合并同会话同候选的非终态任务。"""

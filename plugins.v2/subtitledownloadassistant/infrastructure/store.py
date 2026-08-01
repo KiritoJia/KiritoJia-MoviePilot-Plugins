@@ -252,14 +252,31 @@ class PluginStore:
 
     @staticmethod
     def _pruned_tasks(tasks: dict[str, SubtitleTask]) -> dict[str, SubtitleTask]:
-        """返回只保留最近 500 条终态任务的候选快照。"""
+        """返回保留待恢复中断项及最近 500 条普通终态任务的快照。"""
 
-        terminal = [item for item in tasks.values() if item.is_terminal]
+        terminal = [
+            item
+            for item in tasks.values()
+            if item.is_terminal
+            and not (
+                item.status is TaskStatus.INTERRUPTED
+                and item.reason_code == "service_interrupted"
+            )
+        ]
         if len(terminal) <= 500:
             return tasks
         terminal.sort(key=lambda item: item.finished_at or item.created_at, reverse=True)
         keep = {item.id for item in terminal[:500]}
-        return {key: value for key, value in tasks.items() if not value.is_terminal or key in keep}
+        return {
+            key: value
+            for key, value in tasks.items()
+            if not value.is_terminal
+            or (
+                value.status is TaskStatus.INTERRUPTED
+                and value.reason_code == "service_interrupted"
+            )
+            or key in keep
+        }
 
     @staticmethod
     def _pruned_records(records: dict[str, MatchRecord]) -> dict[str, MatchRecord]:
@@ -285,10 +302,18 @@ class PluginStore:
     async def save_task(self, task: SubtitleTask) -> None:
         """异步保存任务，并在持久化成功后发布候选快照。"""
 
+        await self.save_tasks([task])
+
+    async def save_tasks(self, tasks: list[SubtitleTask]) -> None:
+        """一次持久化一批任务，供大批中断任务恢复使用。"""
+
+        if not tasks:
+            return
         async with self._async_mutation_lock:
             with self._lock:
                 candidate = dict(self._tasks)
-                candidate[task.id] = task.model_copy(deep=True)
+                for task in tasks:
+                    candidate[task.id] = task.model_copy(deep=True)
                 candidate = self._pruned_tasks(candidate)
                 items = self._task_values(candidate)
             await self._persist_partition(self.TASKS_KEY, items)
