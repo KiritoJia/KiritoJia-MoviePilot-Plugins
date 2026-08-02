@@ -21,6 +21,7 @@ class TaskStatus(StrEnum):
 
 
 class TaskTrigger(StrEnum):
+    TRANSFER_EVENT = "transfer_event"
     CUSTOM_DIRECTORY_SCAN = "custom_directory_scan"
 
 
@@ -29,7 +30,7 @@ class TaskWorkItem:
     context: object
     target: object
     host_mediainfo: object | None = None
-    trigger: TaskTrigger = TaskTrigger.CUSTOM_DIRECTORY_SCAN
+    trigger: TaskTrigger = TaskTrigger.TRANSFER_EVENT
     history_target_path: str | None = None
     target_history_id: int | None = None
 
@@ -301,6 +302,81 @@ def test_incremental_scan_state_flow() -> None:
         assert eighth["submitted_count"] == 1
 
     asyncio.run(run())
+
+
+def test_transfer_event_only_enqueues_local_target() -> None:
+    plugin_class = _load_plugin_class()
+    original_path = "/115open/recent/Show.S01E05.mkv"
+    original_context = SimpleNamespace(
+        target_path=original_path,
+        target_storage="CloudDrive",
+    )
+    cloud_target = SimpleNamespace(path=original_path, storage="CloudDrive")
+    local_path = "/media/tv/Show.S01E05.strm"
+    local_context = SimpleNamespace(target_path=local_path, target_storage="local")
+    local_target = SimpleNamespace(path=local_path, storage="local")
+
+    class Coordinator:
+        def __init__(self) -> None:
+            self.items: list[TaskWorkItem] = []
+
+        async def enqueue(self, item: TaskWorkItem) -> str:
+            self.items.append(item)
+            return f"task-{len(self.items)}"
+
+    class Targets:
+        def __init__(self) -> None:
+            self.result = (original_context, cloud_target)
+
+        async def resolve_runtime_target(self, _context, _target):
+            return self.result
+
+    coordinator = Coordinator()
+    targets = Targets()
+    plugin = object.__new__(plugin_class)
+    plugin.coordinator = coordinator
+    plugin.targets = targets
+    plugin.get_state = lambda: True
+    handler_globals = plugin_class.on_transfer_complete.__globals__
+    original_builder = handler_globals["build_media_context"]
+    handler_globals["build_media_context"] = lambda *_args: original_context
+    event = SimpleNamespace(
+        event_data={
+            "transferinfo": SimpleNamespace(target_item=cloud_target),
+            "transfer_history_id": "7378",
+            "mediainfo": object(),
+        }
+    )
+
+    async def run() -> None:
+        await plugin.on_transfer_complete(event)
+        assert coordinator.items == []
+
+        targets.result = (local_context, local_target)
+        await plugin.on_transfer_complete(event)
+        assert len(coordinator.items) == 1
+        assert coordinator.items[0].context is local_context
+        assert coordinator.items[0].target is local_target
+        assert coordinator.items[0].history_target_path == original_path
+        assert coordinator.items[0].target_history_id == 7378
+
+        local_event = SimpleNamespace(
+            event_data={
+                "transferinfo": SimpleNamespace(target_item=local_target),
+                "transfer_history_id": 7379,
+            }
+        )
+        handler_globals["build_media_context"] = lambda *_args: local_context
+        targets.result = (local_context, local_target)
+        await plugin.on_transfer_complete(local_event)
+        assert len(coordinator.items) == 2
+        assert coordinator.items[1].target is local_target
+        assert coordinator.items[1].target_history_id == 7379
+
+    try:
+        asyncio.run(run())
+    finally:
+        handler_globals["build_media_context"] = original_builder
 
 
 def test_store_upgrade_adds_scan_index_without_touching_existing_data() -> None:

@@ -60,7 +60,7 @@ class SubtitleDownloadAssistant(_PluginBase):
     plugin_name = "字幕下载助手"
     plugin_desc = "自动刮削媒体库影片字幕，支持常见视频格式及 STRM 格式。"
     plugin_icon = "https://raw.githubusercontent.com/KiritoJia/SubtitleDownloadAssistant/main/icons/SubtitleDownloadAssistant.png"
-    plugin_version = "1.1.6"
+    plugin_version = "1.1.7"
     plugin_author = "Kirito"
     plugin_label = "字幕"
     plugin_config_prefix = "subtitledownloadassistant_"
@@ -317,6 +317,12 @@ class SubtitleDownloadAssistant(_PluginBase):
                 f"字幕下载助手已将整理目标“{original_target_path}”"
                 f"定位到本地文件“{context.target_path}”"
             )
+        if getattr(target, "storage", None) != "local":
+            logger.info(
+                f"字幕下载助手整理目标“{original_target_path}”尚未定位到自定义本地目录，"
+                "不创建网盘字幕任务，等待目录监控发现本地文件"
+            )
+            return
         logger.info(f"字幕下载助手收到媒体整理完成事件，目标文件为“{context.target_path}”")
         history_id = data.get("transfer_history_id")
         try:
