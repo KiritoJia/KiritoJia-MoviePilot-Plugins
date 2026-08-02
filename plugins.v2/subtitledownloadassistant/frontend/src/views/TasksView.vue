@@ -2,7 +2,7 @@
 import { computed, onBeforeUnmount, onMounted, ref, watch } from 'vue'
 import { useDisplay } from 'vuetify'
 
-import { clearTerminalTasks, deleteTask, getErrorMessage, getTask, listTasks, retryTask, retryTasksBatch, scanCustomDirectories } from '@/api/client'
+import { clearTerminalTasks, deleteTask, deleteTasksBatch, getErrorMessage, getTask, listTasks, retryTask, retryTasksBatch, scanCustomDirectories } from '@/api/client'
 import ConfirmDialog from '@/components/ConfirmDialog.vue'
 import CopyValue from '@/components/CopyValue.vue'
 import DetailDrawer from '@/components/DetailDrawer.vue'
@@ -49,6 +49,8 @@ const statusOptions: Array<{ title: string; value: TaskStatus | '' }> = [
   { title: '失败', value: 'failed' },
   { title: '已中断', value: 'interrupted' },
 ]
+const retryableStatuses: TaskStatus[] = ['skipped', 'failed', 'interrupted']
+const terminalStatuses: TaskStatus[] = ['success', 'skipped', 'failed', 'interrupted']
 const pageSizeOptions = [25, 50, 100]
 
 const items = ref<TaskListItem[]>([])
@@ -58,6 +60,7 @@ const pageSize = ref<25 | 50 | 100>(25)
 const searchInput = ref('')
 const search = useDebouncedValue(searchInput)
 const status = ref<TaskStatus | ''>('')
+const statusCounts = ref<Partial<Record<TaskStatus, number>>>({})
 const loading = ref(false)
 const refreshing = ref(false)
 const loaded = ref(false)
@@ -77,7 +80,10 @@ const retryTarget = ref<TaskListItem | null>(null)
 const selectedTaskIds = ref<Set<string>>(new Set())
 const batchRetryOpen = ref(false)
 const batchRetrying = ref(false)
-const batchRetryScope = ref<'selected' | 'all'>('selected')
+const batchRetryScope = ref<'selected' | 'group'>('selected')
+const batchDeleteOpen = ref(false)
+const batchDeleting = ref(false)
+const batchDeleteScope = ref<'selected' | 'group'>('selected')
 const clearTasksOpen = ref(false)
 const clearingTasks = ref(false)
 const scanOpen = ref(false)
@@ -98,23 +104,37 @@ const hasFilters = computed(() => Boolean(search.value || status.value))
 const totalPages = computed(() => Math.max(1, Math.ceil(total.value / pageSize.value)))
 const canLoadMore = computed(() => !isDesktop.value && items.value.length < total.value)
 const selectedListItem = computed(() => items.value.find(item => item.id === selectedId.value) || detail.value || deleteTarget.value || retryTarget.value)
-const pageInterruptedItems = computed(() => items.value.filter(item => item.status === 'interrupted'))
+const pageTerminalItems = computed(() => items.value.filter(item => isTerminalTask(item.status)))
+const selectedItems = computed(() => items.value.filter(item => selectedTaskIds.value.has(item.id)))
+const selectedRetryableItems = computed(() => selectedItems.value.filter(item => canRetryTask(item)))
 const selectedTaskCount = computed(() => selectedTaskIds.value.size)
-const allPageInterruptedSelected = computed(() => (
-  pageInterruptedItems.value.length > 0
-  && pageInterruptedItems.value.every(item => selectedTaskIds.value.has(item.id))
+const selectedRetryableCount = computed(() => selectedRetryableItems.value.length)
+const allPageTerminalSelected = computed(() => (
+  pageTerminalItems.value.length > 0
+  && pageTerminalItems.value.every(item => selectedTaskIds.value.has(item.id))
 ))
-const somePageInterruptedSelected = computed(() => (
-  pageInterruptedItems.value.some(item => selectedTaskIds.value.has(item.id))
-  && !allPageInterruptedSelected.value
+const somePageTerminalSelected = computed(() => (
+  pageTerminalItems.value.some(item => selectedTaskIds.value.has(item.id))
+  && !allPageTerminalSelected.value
 ))
+const allTaskCount = computed(() => Object.values(statusCounts.value).reduce((sum, count) => sum + (count || 0), 0))
+const currentGroupCount = computed(() => status.value ? (statusCounts.value[status.value] || 0) : allTaskCount.value)
+const currentGroupTitle = computed(() => status.value ? taskStates[status.value].label : '全部任务')
+const currentGroupRetryable = computed(() => status.value !== '' && retryableStatuses.includes(status.value))
+const currentGroupTerminal = computed(() => status.value !== '' && terminalStatuses.includes(status.value))
 const batchRetryMessage = computed(() => {
   if (batchRetryScope.value === 'selected') {
-    return `将让选中的 ${selectedTaskCount.value} 条已中断任务回到等待队列并重新开始。原中断运行轨迹会重置，媒体信息、目标路径和任务 ID 保留。`
+    return `将让选中的 ${selectedRetryableCount.value} 条可重试任务回到等待队列并重新开始。原运行轨迹会重置，媒体信息、目标路径和任务 ID 保留。`
   }
-  const scope = search.value ? `搜索“${search.value}”命中的` : '当前任务库中的'
-  const count = status.value === 'interrupted' ? ` ${total.value} 条` : ''
-  return `将恢复${scope}${count}已中断任务。任务会按现有并发上限排队执行，不会同时请求全部字幕源；原中断运行轨迹会重置。`
+  const scope = search.value ? `搜索“${search.value}”命中的` : '当前'
+  return `将重新运行${scope} ${currentGroupCount.value} 条${currentGroupTitle.value}。任务会按现有并发上限排队执行，不会同时请求全部字幕源；原运行轨迹会重置。`
+})
+const batchDeleteMessage = computed(() => {
+  if (batchDeleteScope.value === 'selected') {
+    return `将删除选中的 ${selectedTaskCount.value} 条终态任务记录。字幕文件、字幕匹配记录和媒体文件不会被删除。此操作无法撤销。`
+  }
+  const scope = search.value ? `搜索“${search.value}”命中的` : '当前'
+  return `将删除${scope} ${currentGroupCount.value} 条${currentGroupTitle.value}记录。字幕文件、字幕匹配记录和媒体文件不会被删除。此操作无法撤销。`
 })
 
 watch(
@@ -226,6 +246,7 @@ async function loadPage(options: { silent?: boolean; append?: boolean; requested
       if (!isDesktop.value) page.value = requestedPage
     }
     total.value = response.total
+    statusCounts.value = response.status_counts || {}
     loaded.value = true
     error.value = ''
     staleError.value = ''
@@ -302,7 +323,7 @@ function requestDelete(item: TaskListItem): void {
 }
 
 function canRetryTask(item: TaskListItem): boolean {
-  return item.status === 'skipped' || item.status === 'failed' || item.status === 'interrupted'
+  return retryableStatuses.includes(item.status)
 }
 
 function requestRetry(item: TaskListItem): void {
@@ -322,31 +343,39 @@ function setTaskSelected(taskId: string, selected: boolean): void {
   selectedTaskIds.value = next
 }
 
-function togglePageInterrupted(selected: boolean): void {
+function togglePageTerminal(selected: boolean): void {
   const next = new Set(selectedTaskIds.value)
-  for (const item of pageInterruptedItems.value) {
+  for (const item of pageTerminalItems.value) {
     if (selected) next.add(item.id)
     else next.delete(item.id)
   }
   selectedTaskIds.value = next
 }
 
-function requestBatchRetry(scope: 'selected' | 'all'): void {
-  if (scope === 'selected' && !selectedTaskCount.value) return
+function requestBatchRetry(scope: 'selected' | 'group'): void {
+  if (scope === 'selected' && !selectedRetryableCount.value) return
+  if (scope === 'group' && (!currentGroupRetryable.value || !currentGroupCount.value)) return
   batchRetryScope.value = scope
   batchRetryOpen.value = true
 }
 
+function requestBatchDelete(scope: 'selected' | 'group'): void {
+  if (scope === 'selected' && !selectedTaskCount.value) return
+  if (scope === 'group' && (!currentGroupTerminal.value || !currentGroupCount.value)) return
+  batchDeleteScope.value = scope
+  batchDeleteOpen.value = true
+}
+
 async function confirmBatchRetry(): Promise<void> {
   const scope = batchRetryScope.value
-  const taskIds = [...selectedTaskIds.value]
+  const taskIds = selectedRetryableItems.value.map(item => item.id)
   if (scope === 'selected' && !taskIds.length) return
   batchRetrying.value = true
   taskNotice.value = ''
   try {
     const response = await retryTasksBatch(props.api, props.pluginId, scope === 'selected'
       ? { taskIds }
-      : { allInterrupted: true, search: search.value })
+      : { allMatching: true, statuses: status.value ? [status.value] : [], search: search.value })
     batchRetryOpen.value = false
     clearTaskSelection()
     page.value = 1
@@ -358,6 +387,37 @@ async function confirmBatchRetry(): Promise<void> {
     staleError.value = getErrorMessage(requestError, '批量恢复任务失败')
   } finally {
     batchRetrying.value = false
+  }
+}
+
+async function confirmBatchDelete(): Promise<void> {
+  const scope = batchDeleteScope.value
+  const taskIds = [...selectedTaskIds.value]
+  if (scope === 'selected' && !taskIds.length) return
+  batchDeleting.value = true
+  taskNotice.value = ''
+  try {
+    const response = await deleteTasksBatch(props.api, props.pluginId, scope === 'selected'
+      ? { taskIds }
+      : { allMatching: true, statuses: status.value ? [status.value] : [], search: search.value })
+    batchDeleteOpen.value = false
+    if (
+      selectedListItem.value
+      && (
+        (scope === 'selected' && taskIds.includes(selectedListItem.value.id))
+        || (scope === 'group' && selectedListItem.value.status === status.value)
+      )
+    ) closeDetail()
+    clearTaskSelection()
+    page.value = 1
+    await loadPage({ silent: true, requestedPage: 1 })
+    taskNotice.value = response.message
+    emit('action')
+  } catch (requestError) {
+    batchDeleteOpen.value = false
+    staleError.value = getErrorMessage(requestError, '批量删除任务失败')
+  } finally {
+    batchDeleting.value = false
   }
 }
 
@@ -547,33 +607,6 @@ function sourceRunRejectionSummary(run: SourceRun): string {
           <h2 id="tasks-view-title">任务</h2>
         </div>
         <div class="header-actions">
-          <VTooltip v-if="status === '' || status === 'interrupted'" text="恢复当前搜索范围内的全部已中断任务">
-            <template #activator="{ props: tooltipProps }">
-              <VBtn
-                v-if="isDesktop"
-                v-bind="tooltipProps"
-                prepend-icon="mdi-restart-alert"
-                size="small"
-                variant="tonal"
-                color="primary"
-                :disabled="loading || batchRetrying || (status === 'interrupted' && total === 0)"
-                :loading="batchRetrying"
-                @click="requestBatchRetry('all')"
-              >恢复中断</VBtn>
-              <VBtn
-                v-else
-                v-bind="tooltipProps"
-                icon="mdi-restart-alert"
-                size="small"
-                variant="text"
-                color="primary"
-                :disabled="loading || batchRetrying || (status === 'interrupted' && total === 0)"
-                :loading="batchRetrying"
-                aria-label="恢复全部已中断任务"
-                @click="requestBatchRetry('all')"
-              />
-            </template>
-          </VTooltip>
           <VTooltip text="清理全部已结束任务">
             <template #activator="{ props: tooltipProps }">
               <VBtn
@@ -643,29 +676,72 @@ function sourceRunRejectionSummary(run: SourceRun): string {
           hide-details
           :density="isDesktop ? 'compact' : 'comfortable'"
         />
-        <VSelect v-model="status" label="状态" :items="statusOptions" hide-details :density="isDesktop ? 'compact' : 'comfortable'" />
+        <VSelect v-if="!isDesktop" v-model="status" label="状态分组" :items="statusOptions" hide-details density="comfortable" />
+      </div>
+
+      <div class="status-group-toolbar">
+        <div v-if="isDesktop" class="status-segments" aria-label="任务状态分组">
+          <VBtnToggle v-model="status" mandatory divided density="compact" color="primary" variant="outlined">
+            <VBtn v-for="option in statusOptions" :key="option.value || 'all'" :value="option.value" size="small">
+              <span>{{ option.title.replace('全部状态', '全部') }}</span>
+              <span class="status-segment-count">{{ option.value ? (statusCounts[option.value] || 0) : allTaskCount }}</span>
+            </VBtn>
+          </VBtnToggle>
+        </div>
+        <div class="status-group-summary">
+          <span>{{ currentGroupTitle }} · {{ currentGroupCount }} 条</span>
+          <VBtn
+            v-if="currentGroupRetryable"
+            size="small"
+            variant="text"
+            color="primary"
+            prepend-icon="mdi-restart"
+            :disabled="!currentGroupCount || batchRetrying"
+            :loading="batchRetrying"
+            @click="requestBatchRetry('group')"
+          >重启此分组</VBtn>
+          <VBtn
+            v-if="currentGroupTerminal"
+            size="small"
+            variant="text"
+            color="error"
+            prepend-icon="mdi-delete-outline"
+            :disabled="!currentGroupCount || batchDeleting"
+            :loading="batchDeleting"
+            @click="requestBatchDelete('group')"
+          >删除此分组</VBtn>
+        </div>
       </div>
     </div>
 
     <div v-if="isDesktop && selectedTaskCount" class="batch-action-bar" role="status">
       <div class="batch-action-bar__summary">
         <VIcon icon="mdi-checkbox-marked-circle-outline" size="19" color="primary" />
-        <span>已选择 {{ selectedTaskCount }} 条中断任务</span>
+        <span>已选择 {{ selectedTaskCount }} 条终态任务</span>
       </div>
       <div class="batch-action-bar__actions">
         <VBtn size="small" variant="text" color="default" @click="clearTaskSelection">取消选择</VBtn>
         <VBtn
+          v-if="selectedRetryableCount"
           size="small"
-          variant="flat"
+          variant="tonal"
           color="primary"
           prepend-icon="mdi-restart"
           :loading="batchRetrying"
           @click="requestBatchRetry('selected')"
-        >恢复选中任务</VBtn>
+        >重启可重试（{{ selectedRetryableCount }}）</VBtn>
+        <VBtn
+          size="small"
+          variant="flat"
+          color="error"
+          prepend-icon="mdi-delete-outline"
+          :loading="batchDeleting"
+          @click="requestBatchDelete('selected')"
+        >删除选中</VBtn>
       </div>
     </div>
 
-    <VAlert v-if="staleError" type="warning" variant="tonal" density="compact" class="mb-3">
+    <VAlert v-if="staleError" type="warning" variant="tonal" density="compact" class="notice-alert mb-3">
       <div class="inline-alert">
         <span>刷新失败，当前数据可能已过期：{{ staleError }}</span>
         <VBtn size="small" variant="text" prepend-icon="mdi-refresh" @click="loadPage({ silent: true })">重试</VBtn>
@@ -678,7 +754,7 @@ function sourceRunRejectionSummary(run: SourceRun): string {
       variant="tonal"
       density="compact"
       closable
-      class="mb-3"
+      class="notice-alert mb-3"
       @click:close="scanNotice = ''"
     >{{ scanNotice }}</VAlert>
 
@@ -688,7 +764,7 @@ function sourceRunRejectionSummary(run: SourceRun): string {
       variant="tonal"
       density="compact"
       closable
-      class="mb-3"
+      class="notice-alert mb-3"
       @click:close="taskNotice = ''"
     >{{ taskNotice }}</VAlert>
 
@@ -727,21 +803,21 @@ function sourceRunRejectionSummary(run: SourceRun): string {
               <tr>
                 <th class="selection-column" @click.stop>
                   <VCheckboxBtn
-                    :model-value="allPageInterruptedSelected"
-                    :indeterminate="somePageInterruptedSelected"
-                    :disabled="!pageInterruptedItems.length"
+                    :model-value="allPageTerminalSelected"
+                    :indeterminate="somePageTerminalSelected"
+                    :disabled="!pageTerminalItems.length"
                     density="compact"
                     color="primary"
-                    aria-label="选择本页全部已中断任务"
-                    @update:model-value="value => togglePageInterrupted(Boolean(value))"
+                    aria-label="选择本页全部终态任务"
+                    @update:model-value="value => togglePageTerminal(Boolean(value))"
                   />
                 </th>
-                <th>媒体</th>
-                <th>目标文件</th>
-                <th>状态</th>
-                <th>触发</th>
-                <th>结果</th>
-                <th>时间</th>
+                <th class="media-column">媒体</th>
+                <th class="file-column">目标文件</th>
+                <th class="status-column">状态</th>
+                <th class="trigger-column">触发</th>
+                <th class="result-column">结果</th>
+                <th class="time-column">时间</th>
                 <th class="actions-column">操作</th>
               </tr>
             </thead>
@@ -762,14 +838,14 @@ function sourceRunRejectionSummary(run: SourceRun): string {
                 <td class="selection-column" @click.stop @keydown.stop>
                   <VCheckboxBtn
                     :model-value="selectedTaskIds.has(item.id)"
-                    :disabled="item.status !== 'interrupted'"
+                    :disabled="!isTerminalTask(item.status)"
                     density="compact"
                     color="primary"
                     :aria-label="`选择任务 ${item.target_file_name}`"
                     @update:model-value="value => setTaskSelected(item.id, Boolean(value))"
                   />
                 </td>
-                <td>
+                <td class="media-column">
                   <div class="primary-cell">
                     <VIcon :icon="item.media_type === 'movie' ? 'mdi-movie-outline' : 'mdi-television-classic'" size="18" />
                     <div>
@@ -778,14 +854,14 @@ function sourceRunRejectionSummary(run: SourceRun): string {
                     </div>
                   </div>
                 </td>
-                <td><span class="file-name" :title="item.target_file_name">{{ item.target_file_name }}</span></td>
-                <td>
+                <td class="file-column"><span class="file-name" :title="item.target_file_name">{{ item.target_file_name }}</span></td>
+                <td class="status-column">
                   <StateChip :state="taskStates[item.status]" />
                   <div v-if="item.status === 'processing' && item.stage" class="cell-note">{{ stageLabels[item.stage] }}</div>
                 </td>
-                <td><span class="cell-note">{{ taskTriggerLabels[item.trigger] }}</span></td>
-                <td><span class="result-text">{{ resultText(item) }}</span></td>
-                <td><span class="time-text">{{ taskTime(item) }}</span></td>
+                <td class="trigger-column"><span class="cell-note">{{ taskTriggerLabels[item.trigger] }}</span></td>
+                <td class="result-column"><span class="result-text">{{ resultText(item) }}</span></td>
+                <td class="time-column"><span class="time-text">{{ taskTime(item) }}</span></td>
                 <td class="actions-column" @click.stop @keydown.stop>
                   <VTooltip text="查看详情">
                     <template #activator="{ props: tooltipProps }">
@@ -1088,14 +1164,26 @@ function sourceRunRejectionSummary(run: SourceRun): string {
 
     <ConfirmDialog
       v-model="batchRetryOpen"
-      :title="batchRetryScope === 'selected' ? '恢复选中任务' : '恢复全部已中断任务'"
+      :title="batchRetryScope === 'selected' ? '重启选中任务' : `重启${currentGroupTitle}`"
       :message="batchRetryMessage"
-      :confirm-text="batchRetryScope === 'selected' ? '恢复选中任务' : '确认全部恢复'"
+      :confirm-text="batchRetryScope === 'selected' ? '重启选中任务' : '重启此分组'"
       confirm-color="primary"
       confirm-icon="mdi-restart"
-      title-icon="mdi-restart-alert"
+      title-icon="mdi-restart"
       :loading="batchRetrying"
       @confirm="confirmBatchRetry"
+    />
+
+    <ConfirmDialog
+      v-model="batchDeleteOpen"
+      :title="batchDeleteScope === 'selected' ? '删除选中任务' : `删除${currentGroupTitle}`"
+      :message="batchDeleteMessage"
+      :confirm-text="batchDeleteScope === 'selected' ? '删除选中' : '删除此分组'"
+      confirm-color="error"
+      confirm-icon="mdi-delete-outline"
+      title-icon="mdi-delete-sweep-outline"
+      :loading="batchDeleting"
+      @confirm="confirmBatchDelete"
     />
   </section>
 </template>
@@ -1116,8 +1204,50 @@ function sourceRunRejectionSummary(run: SourceRun): string {
 .view-header h2 { margin: 0; color: rgb(var(--v-theme-on-surface)); font-size: 1rem; font-weight: 650; letter-spacing: 0; }
 .view-header p { margin: 0.25rem 0 0; color: rgba(var(--v-theme-on-surface), var(--v-medium-emphasis-opacity)); font-size: 0.8125rem; }
 .header-actions { display: flex; flex: 0 0 auto; align-items: center; gap: 0.25rem; }
-.filter-bar { display: grid; grid-template-columns: minmax(15rem, 1fr) minmax(10rem, 14rem); gap: 0.75rem; }
+.filter-bar { display: grid; grid-template-columns: minmax(0, 1fr); gap: 0.75rem; }
 .inline-alert { display: flex; align-items: center; justify-content: space-between; gap: 1rem; }
+.status-group-toolbar {
+  display: flex;
+  min-width: 0;
+  align-items: center;
+  justify-content: space-between;
+  gap: 0.75rem;
+  margin-block-start: 0.625rem;
+}
+.status-segments { min-width: 0; overflow-x: auto; scrollbar-width: thin; }
+.status-segments :deep(.v-btn-toggle) { min-width: max-content; }
+.status-segments :deep(.v-btn) { min-width: 4.75rem; letter-spacing: 0; }
+.status-segment-count {
+  min-width: 1.25rem;
+  margin-inline-start: 0.4rem;
+  padding-inline: 0.25rem;
+  border-radius: 0.25rem;
+  color: rgba(var(--v-theme-on-surface), var(--v-medium-emphasis-opacity));
+  background: rgba(var(--v-theme-on-surface), 0.07);
+  font-size: 0.6875rem;
+  line-height: 1.25rem;
+}
+.status-group-summary {
+  display: flex;
+  flex: 0 0 auto;
+  align-items: center;
+  gap: 0.25rem;
+  color: rgba(var(--v-theme-on-surface), var(--v-medium-emphasis-opacity));
+  font-size: 0.75rem;
+  white-space: nowrap;
+}
+.notice-alert {
+  flex: 0 0 auto;
+  min-block-size: 2.5rem;
+  overflow: visible;
+}
+.notice-alert :deep(.v-alert__content) {
+  min-width: 0;
+  overflow: visible;
+  overflow-wrap: anywhere;
+  line-height: 1.45;
+  white-space: normal;
+}
 .batch-action-bar {
   display: flex;
   min-height: 3rem;
@@ -1135,19 +1265,27 @@ function sourceRunRejectionSummary(run: SourceRun): string {
 .master-detail, .master-pane { min-width: 0; }
 .table-frame { overflow: hidden; border: 1px solid rgba(var(--v-border-color), var(--v-border-opacity)); border-radius: 0.375rem; background: rgb(var(--v-theme-surface)); }
 .table-frame :deep(.v-table__wrapper) { overscroll-behavior: contain; scrollbar-gutter: stable; }
+.data-table :deep(table) { width: 100%; table-layout: fixed; }
 .table-frame :deep(thead th) { color: rgba(var(--v-theme-on-surface), var(--v-medium-emphasis-opacity)); background: rgb(var(--v-theme-surface)) !important; font-size: 0.75rem; font-weight: 650 !important; }
 .table-frame :deep(tbody td) { border-bottom-color: rgba(var(--v-border-color), 0.08) !important; }
 .selectable-row { cursor: pointer; transition: background-color 180ms ease; }
 .selectable-row:hover, .selectable-row--active { background: rgba(var(--v-theme-primary), 0.08); }
 .selectable-row:focus-visible { outline: 2px solid rgb(var(--v-theme-primary)); outline-offset: -2px; scroll-margin-block-start: var(--v-table-header-height, 3rem); }
-.primary-cell { display: flex; min-width: 12rem; align-items: flex-start; gap: 0.5rem; }
+.primary-cell { display: flex; min-width: 0; align-items: flex-start; gap: 0.5rem; }
+.primary-cell > div { min-width: 0; }
 .primary-cell strong, .primary-cell span { display: block; }
-.primary-cell strong { max-width: 16rem; overflow: hidden; color: rgb(var(--v-theme-on-surface)); font-size: 0.875rem; text-overflow: ellipsis; white-space: nowrap; }
+.primary-cell strong { overflow: hidden; color: rgb(var(--v-theme-on-surface)); font-size: 0.875rem; text-overflow: ellipsis; white-space: nowrap; }
 .primary-cell span, .cell-note, .time-text { color: rgba(var(--v-theme-on-surface), var(--v-medium-emphasis-opacity)); font-size: 0.75rem; }
-.file-name { display: block; max-width: 14rem; overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
-.result-text { display: -webkit-box; max-width: 18rem; overflow: hidden; -webkit-box-orient: vertical; -webkit-line-clamp: 2; font-size: 0.8125rem; }
-.time-text { display: block; min-width: 9rem; line-height: 1.45; }
+.file-name { display: block; overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
+.result-text { display: -webkit-box; overflow: hidden; -webkit-box-orient: vertical; -webkit-line-clamp: 2; font-size: 0.8125rem; }
+.time-text { display: block; line-height: 1.45; }
 .selection-column { width: 2.75rem; padding-inline: 0.5rem !important; }
+.media-column { width: 19%; }
+.file-column { width: 18%; }
+.status-column { width: 5.75rem; }
+.trigger-column { width: 4.5rem; }
+.result-column { width: 16%; }
+.time-column { width: 8.25rem; }
 .actions-column { width: 6.5rem; text-align: end !important; white-space: nowrap; }
 .pagination-bar { display: grid; grid-template-columns: auto 1fr 7rem; align-items: center; gap: 1rem; padding: 0.75rem 0; color: rgba(var(--v-theme-on-surface), var(--v-medium-emphasis-opacity)); font-size: 0.8125rem; }
 .table-pagination { justify-self: center; }
@@ -1216,18 +1354,16 @@ function sourceRunRejectionSummary(run: SourceRun): string {
 }
 
 @media (max-width: 959px) {
-  .filter-bar { grid-template-columns: 1fr; }
+  .filter-bar { grid-template-columns: minmax(0, 1fr) minmax(8rem, 10rem); }
+  .status-group-toolbar { justify-content: flex-end; }
 }
 
 @media (max-width: 37.5rem) {
   .view-controls { margin-block-end: 0.75rem; padding-block-end: 0.5rem; }
   .view-header { margin-block-end: 0.5rem; }
   .view-header p { display: none; }
-  .filter-bar { grid-template-columns: minmax(0, 1fr) minmax(7.5rem, 9rem); gap: 0.5rem; }
-}
-
-@media (max-width: 26rem) {
-  .filter-bar { grid-template-columns: minmax(0, 1fr); }
+  .filter-bar { grid-template-columns: minmax(0, 1fr); gap: 0.5rem; }
+  .status-group-summary { width: 100%; flex-wrap: wrap; justify-content: flex-end; white-space: normal; }
 }
 
 @media (prefers-reduced-motion: reduce) {

@@ -14,6 +14,7 @@ import {
   type TargetItem,
   type TaskDetail,
   type TaskListItem,
+  type TaskStatus,
 } from '@/types'
 import { isTerminalTask } from '@/types/presentation'
 import { reactive } from 'vue'
@@ -338,7 +339,7 @@ export function createMockApi() {
       await wait(state.mode === 'error' ? 120 : 240)
       if (state.mode === 'error') throw new Error('开发壳模拟服务暂时不可用')
       if (path.includes('/tasks/')) return clone(state.taskDetails[path.split('/').pop() || '']) as T
-      if (path.endsWith('/tasks')) return page(state.mode === 'empty' ? [] : state.tasks, options) as T
+      if (path.endsWith('/tasks')) return taskPage(state.mode === 'empty' ? [] : state.tasks, options) as T
       if (path.includes('/records/')) return clone(state.recordDetails[path.split('/').pop() || '']) as T
       if (path.endsWith('/records')) return page(state.mode === 'empty' ? [] : state.records, options) as T
       if (path.endsWith('/targets')) return page(state.mode === 'empty' ? [] : state.targets, options) as T
@@ -386,15 +387,17 @@ export function createMockApi() {
         } satisfies CustomDirectoryScanResponse as T
       }
       if (path.endsWith('/tasks/retry-batch')) {
-        const request = payload as { task_ids?: string[]; all_interrupted?: boolean; search?: string | null }
+        const request = payload as { task_ids?: string[]; all_matching?: boolean; statuses?: TaskStatus[]; search?: string | null }
         const selectedIds = new Set(request.task_ids || [])
+        const requestedStatuses = new Set(request.statuses || [])
         const query = (request.search || '').trim().toLocaleLowerCase()
         const matched = state.tasks.filter(task => (
-          task.status === 'interrupted'
+          ['skipped', 'failed', 'interrupted'].includes(task.status)
           && (
             selectedIds.has(task.id)
             || (
-              request.all_interrupted
+              request.all_matching
+              && requestedStatuses.has(task.status)
               && (!query || `${task.media_title} ${task.target_file_name} ${task.reason_message || ''}`.toLocaleLowerCase().includes(query))
             )
           )
@@ -412,13 +415,13 @@ export function createMockApi() {
           })
           if (state.taskDetails[task.id]) Object.assign(state.taskDetails[task.id], clone(task))
         }
-        const missingCount = request.all_interrupted ? 0 : Math.max(0, selectedIds.size - matched.length)
+        const missingCount = request.all_matching ? 0 : Math.max(0, selectedIds.size - matched.length)
         return {
           success: true,
           message: matched.length
-            ? `已恢复 ${matched.length} 条中断任务并加入受限队列`
-            : '没有新的中断任务需要加入队列',
-          requested_count: request.all_interrupted ? matched.length : selectedIds.size,
+            ? `已重新运行 ${matched.length} 条任务并加入受限队列`
+            : '没有新的可重试任务需要加入队列',
+          requested_count: request.all_matching ? matched.length : selectedIds.size,
           matched_count: matched.length,
           eligible_count: matched.length,
           submitted_count: matched.length,
@@ -426,6 +429,37 @@ export function createMockApi() {
           skipped_count: 0,
           missing_count: missingCount,
           error_count: 0,
+        } as T
+      }
+      if (path.endsWith('/tasks/delete-batch')) {
+        const request = payload as { task_ids?: string[]; all_matching?: boolean; statuses?: TaskStatus[]; search?: string | null }
+        const selectedIds = new Set(request.task_ids || [])
+        const requestedStatuses = new Set(request.statuses || [])
+        const query = (request.search || '').trim().toLocaleLowerCase()
+        const matched = state.tasks.filter(task => (
+          isTerminalTask(task.status)
+          && (
+            selectedIds.has(task.id)
+            || (
+              request.all_matching
+              && requestedStatuses.has(task.status)
+              && (!query || `${task.media_title} ${task.target_file_name} ${task.reason_message || ''}`.toLocaleLowerCase().includes(query))
+            )
+          )
+        ))
+        const deletedIds = new Set(matched.map(task => task.id))
+        state.tasks = state.tasks.filter(task => !deletedIds.has(task.id))
+        for (const id of deletedIds) delete state.taskDetails[id]
+        const missingCount = request.all_matching ? 0 : Math.max(0, selectedIds.size - matched.length)
+        return {
+          success: true,
+          message: deletedIds.size ? `已删除 ${deletedIds.size} 条任务记录` : '没有可删除的终态任务',
+          requested_count: request.all_matching ? matched.length : selectedIds.size,
+          matched_count: matched.length,
+          deleted_count: deletedIds.size,
+          skipped_count: 0,
+          missing_count: missingCount,
+          active_count: state.tasks.filter(task => !isTerminalTask(task.status)).length,
         } as T
       }
       if (/\/tasks\/[^/]+\/retry$/.test(path)) {
@@ -624,6 +658,17 @@ function page<T>(items: T[], options?: Record<string, unknown>): { items: T[]; t
   })
   const start = (requestedPage - 1) * requestedSize
   return { items: clone(filtered.slice(start, start + requestedSize)), total: filtered.length, page: requestedPage, page_size: requestedSize }
+}
+
+function taskPage(items: TaskListItem[], options?: Record<string, unknown>) {
+  const params = (options?.params || {}) as Record<string, unknown>
+  const query = typeof params.search === 'string' ? params.search.trim().toLowerCase() : ''
+  const searched = items.filter(item => !query || JSON.stringify(item).toLowerCase().includes(query))
+  const statusCounts = Object.fromEntries(
+    (['queued', 'processing', 'success', 'skipped', 'failed', 'interrupted'] satisfies TaskStatus[])
+      .map(status => [status, searched.filter(item => item.status === status).length]),
+  )
+  return { ...page(items, options), status_counts: statusCounts }
 }
 
 function isValidBatch(recordIds: string[]): boolean {

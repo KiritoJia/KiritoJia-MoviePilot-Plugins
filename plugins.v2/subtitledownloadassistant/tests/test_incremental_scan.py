@@ -158,6 +158,21 @@ def _load_store_class():
     return sys.modules[f"{package}.infrastructure.store"].PluginStore
 
 
+def _load_api_schemas_module():
+    root = Path(__file__).resolve().parents[1]
+    _load_store_class()
+    package = "subtitledownloadassistant_store_test"
+    api_package = _module(f"{package}.api")
+    api_package.__path__ = [str(root / "api")]
+    name = f"{package}.api.schemas"
+    spec = importlib.util.spec_from_file_location(name, root / "api/schemas.py")
+    assert spec and spec.loader
+    module = importlib.util.module_from_spec(spec)
+    sys.modules[name] = module
+    spec.loader.exec_module(module)
+    return module
+
+
 @dataclass(frozen=True)
 class FakeFile:
     path: Path
@@ -459,6 +474,86 @@ def test_store_clears_only_terminal_tasks() -> None:
         enums.TaskStatus.PROCESSING,
     }
     assert len(plugin.data["tasks"]["items"]) == 2
+
+
+def test_store_deletes_only_selected_terminal_tasks() -> None:
+    store_class = _load_store_class()
+    enums = sys.modules["subtitledownloadassistant_store_test.domain.enums"]
+    models = sys.modules["subtitledownloadassistant_store_test.domain.models"]
+
+    class FakePlugin:
+        def __init__(self) -> None:
+            self.data: dict[str, object] = {}
+
+        def get_data(self, key):
+            return self.data.get(key)
+
+        def save_data(self, key, value):
+            self.data[key] = value
+
+        async def async_save_data(self, key, value):
+            self.data[key] = value
+
+    plugin = FakePlugin()
+    store = store_class(plugin)
+    store.initialize()
+    for task_id, status in (
+        ("queued", enums.TaskStatus.QUEUED),
+        ("success", enums.TaskStatus.SUCCESS),
+        ("failed", enums.TaskStatus.FAILED),
+        ("skipped", enums.TaskStatus.SKIPPED),
+    ):
+        store.save_task_sync(
+            models.SubtitleTask(
+                id=task_id,
+                media_title=task_id,
+                target_file_name=f"{task_id}.strm",
+                target_path=f"/media/{task_id}.strm",
+                status=status,
+            )
+        )
+
+    deleted_count = asyncio.run(store.delete_terminal_tasks({"queued", "failed", "missing"}))
+
+    assert deleted_count == 1
+    assert {task.id for task in store.list_tasks_sync()} == {"queued", "success", "skipped"}
+
+
+def test_task_batch_requests_reject_unsafe_status_groups() -> None:
+    schemas = _load_api_schemas_module()
+    enums = sys.modules["subtitledownloadassistant_store_test.domain.enums"]
+
+    retry = schemas.TaskBatchRetryRequest(
+        all_matching=True,
+        statuses=[enums.TaskStatus.FAILED, enums.TaskStatus.SKIPPED],
+    )
+    assert retry.statuses == [enums.TaskStatus.FAILED, enums.TaskStatus.SKIPPED]
+
+    delete = schemas.TaskBatchDeleteRequest(
+        all_matching=True,
+        statuses=[enums.TaskStatus.SUCCESS, enums.TaskStatus.INTERRUPTED],
+    )
+    assert delete.statuses == [enums.TaskStatus.SUCCESS, enums.TaskStatus.INTERRUPTED]
+
+    for model, values in (
+        (
+            schemas.TaskBatchRetryRequest,
+            {"all_matching": True, "statuses": [enums.TaskStatus.SUCCESS]},
+        ),
+        (
+            schemas.TaskBatchDeleteRequest,
+            {"all_matching": True, "statuses": [enums.TaskStatus.PROCESSING]},
+        ),
+        (
+            schemas.TaskBatchDeleteRequest,
+            {"task_ids": ["duplicate", "duplicate"]},
+        ),
+    ):
+        try:
+            model(**values)
+        except ValueError:
+            continue
+        raise AssertionError(f"{model.__name__} should reject {values}")
 
 
 def test_store_preserves_unrecovered_service_interruptions_during_bulk_save() -> None:

@@ -55,6 +55,8 @@ from .schemas import (
     SourceStatusItem,
     TargetListItem,
     TargetPage,
+    TaskBatchDeleteRequest,
+    TaskBatchDeleteResponse,
     TaskBatchRetryRequest,
     TaskBatchRetryResponse,
     TaskDetail,
@@ -188,16 +190,26 @@ class ApiController:
         """分页查询字幕任务安全摘要。"""
 
         tasks = await self._plugin.store.list_tasks()
-        if status is not None:
-            tasks = [task for task in tasks if task.status is status]
         query = (search or "").strip().casefold()
         if query:
             tasks = [task for task in tasks if query in self._task_search_text(task)]
+        status_counts = {
+            item_status: sum(1 for task in tasks if task.status is item_status)
+            for item_status in TaskStatus
+        }
+        if status is not None:
+            tasks = [task for task in tasks if task.status is status]
         tasks.sort(key=self._task_sort_key)
         total = len(tasks)
         start = (page - 1) * page_size
         items = [TaskListItem.model_validate(task) for task in tasks[start : start + page_size]]
-        return TaskPage(items=items, total=total, page=page, page_size=page_size)
+        return TaskPage(
+            items=items,
+            total=total,
+            page=page,
+            page_size=page_size,
+            status_counts=status_counts,
+        )
 
     async def get_task(
         self,
@@ -322,19 +334,20 @@ class ApiController:
         payload: TaskBatchRetryRequest = Body(...),  # noqa: B008 - FastAPI 请求体注入
         _: User = Depends(get_current_active_manage_user_async),  # noqa: B008 - FastAPI 依赖注入
     ) -> TaskBatchRetryResponse:
-        """原地恢复选中或符合搜索条件的已中断任务。"""
+        """原地重置选中或符合当前搜索分组的可重试任务。"""
 
         if self._plugin.targets is None or self._plugin.coordinator is None:
             raise HTTPException(status_code=409, detail="字幕下载助手当前未启用")
 
         tasks = await self._plugin.store.list_tasks()
         missing_count = 0
-        if payload.all_interrupted:
+        if payload.all_matching:
             query = (payload.search or "").strip().casefold()
+            requested_statuses = set(payload.statuses)
             matched = [
                 task
                 for task in tasks
-                if task.status is TaskStatus.INTERRUPTED
+                if task.status in requested_statuses
                 and (not query or query in self._task_search_text(task))
             ]
             matched.sort(
@@ -348,7 +361,8 @@ class ApiController:
             missing_count = len(payload.task_ids) - len(matched)
             requested_count = len(payload.task_ids)
 
-        eligible = [task for task in matched if task.status is TaskStatus.INTERRUPTED]
+        retryable = {TaskStatus.SKIPPED, TaskStatus.FAILED, TaskStatus.INTERRUPTED}
+        eligible = [task for task in matched if task.status in retryable]
         skipped_count = len(matched) - len(eligible)
         entries: list[tuple[SubtitleTask, TaskWorkItem]] = []
         error_count = 0
@@ -378,9 +392,9 @@ class ApiController:
         submitted_count = len(result.resumed_task_ids)
         parts: list[str] = []
         if submitted_count:
-            parts.append(f"已恢复 {submitted_count} 条中断任务并加入受限队列")
+            parts.append(f"已重新运行 {submitted_count} 条任务并加入受限队列")
         else:
-            parts.append("没有新的中断任务需要加入队列")
+            parts.append("没有新的可重试任务需要加入队列")
         if result.merged_count:
             parts.append(f"同路径运行任务合并 {result.merged_count} 条")
         if skipped_count:
@@ -400,6 +414,55 @@ class ApiController:
             skipped_count=skipped_count,
             missing_count=missing_count,
             error_count=error_count,
+        )
+
+    async def delete_tasks_batch(
+        self,
+        payload: TaskBatchDeleteRequest = Body(...),  # noqa: B008 - FastAPI 请求体注入
+        _: User = Depends(get_current_active_manage_user_async),  # noqa: B008 - FastAPI 依赖注入
+    ) -> TaskBatchDeleteResponse:
+        """一次删除选中或符合当前搜索分组的终态任务。"""
+
+        tasks = await self._plugin.store.list_tasks()
+        missing_count = 0
+        if payload.all_matching:
+            query = (payload.search or "").strip().casefold()
+            requested_statuses = set(payload.statuses)
+            matched = [
+                task
+                for task in tasks
+                if task.status in requested_statuses
+                and (not query or query in self._task_search_text(task))
+            ]
+            requested_count = len(matched)
+        else:
+            tasks_by_id = {task.id: task for task in tasks}
+            matched = [tasks_by_id[task_id] for task_id in payload.task_ids if task_id in tasks_by_id]
+            missing_count = len(payload.task_ids) - len(matched)
+            requested_count = len(payload.task_ids)
+
+        eligible = [task for task in matched if task.is_terminal]
+        deleted_count = await self._plugin.store.delete_terminal_tasks({task.id for task in eligible})
+        skipped_count = len(matched) - deleted_count
+        remaining = await self._plugin.store.list_tasks()
+        active_count = sum(1 for task in remaining if not task.is_terminal)
+        parts = [
+            f"已删除 {deleted_count} 条任务记录"
+            if deleted_count
+            else "没有可删除的终态任务"
+        ]
+        if skipped_count:
+            parts.append(f"状态已变化跳过 {skipped_count} 条")
+        if missing_count:
+            parts.append(f"任务不存在 {missing_count} 条")
+        return TaskBatchDeleteResponse(
+            message="；".join(parts),
+            requested_count=requested_count,
+            matched_count=len(matched),
+            deleted_count=deleted_count,
+            skipped_count=skipped_count,
+            missing_count=missing_count,
+            active_count=active_count,
         )
 
     async def list_records(
@@ -970,7 +1033,14 @@ class ApiController:
                 self.retry_tasks_batch,
                 ["POST"],
                 TaskBatchRetryResponse,
-                "批量恢复已中断字幕任务",
+                "批量重新运行终态字幕任务",
+            ),
+            (
+                "/tasks/delete-batch",
+                self.delete_tasks_batch,
+                ["POST"],
+                TaskBatchDeleteResponse,
+                "批量删除终态字幕任务",
             ),
             ("/tasks/{task_id}/retry", self.retry_task, ["POST"], Response, "重新运行终态字幕任务"),
             ("/tasks/{task_id}", self.get_task, ["GET"], TaskDetail, "查询字幕任务详情"),

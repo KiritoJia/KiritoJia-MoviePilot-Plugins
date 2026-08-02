@@ -134,6 +134,10 @@ export interface TaskClearResponse {
   active_count: number
 }
 
+export interface TaskPageResponse extends PageResponse<TaskListItem> {
+  status_counts: Partial<Record<TaskStatus, number>>
+}
+
 export interface TaskBatchRetryResponse {
   success: boolean
   message: string
@@ -145,6 +149,17 @@ export interface TaskBatchRetryResponse {
   skipped_count: number
   missing_count: number
   error_count: number
+}
+
+export interface TaskBatchDeleteResponse {
+  success: boolean
+  message: string
+  requested_count: number
+  matched_count: number
+  deleted_count: number
+  skipped_count: number
+  missing_count: number
+  active_count: number
 }
 
 export interface StageTrace {

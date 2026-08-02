@@ -20,10 +20,12 @@ import type {
   StandardResponse,
   SubtitleSource,
   TargetItem,
+  TaskBatchDeleteResponse,
   TaskDetail,
   TaskBatchRetryResponse,
   TaskClearResponse,
   TaskListItem,
+  TaskPageResponse,
   TaskStatus,
 } from '@/types'
 
@@ -83,7 +85,7 @@ export function listTasks(
   api: PluginApi,
   pluginId: string,
   options: QueryOptions<TaskStatus>,
-): Promise<PageResponse<TaskListItem>> {
+): Promise<TaskPageResponse> {
   return api.get(pluginPath(pluginId, 'tasks'), {
     params: compactParams({
       page: options.page,
@@ -121,14 +123,30 @@ export async function retryTask(api: PluginApi, pluginId: string, taskId: string
 export async function retryTasksBatch(
   api: PluginApi,
   pluginId: string,
-  options: { taskIds?: string[]; allInterrupted?: boolean; search?: string },
+  options: { taskIds?: string[]; allMatching?: boolean; statuses?: TaskStatus[]; search?: string },
 ): Promise<TaskBatchRetryResponse> {
   const response = await api.post<TaskBatchRetryResponse>(pluginPath(pluginId, 'tasks/retry-batch'), {
     task_ids: options.taskIds || [],
-    all_interrupted: Boolean(options.allInterrupted),
+    all_matching: Boolean(options.allMatching),
+    statuses: options.statuses || [],
     search: options.search?.trim() || null,
   })
   if (!response?.success) throw new Error(responseMessage(response) || '批量恢复任务失败')
+  return response
+}
+
+export async function deleteTasksBatch(
+  api: PluginApi,
+  pluginId: string,
+  options: { taskIds?: string[]; allMatching?: boolean; statuses?: TaskStatus[]; search?: string },
+): Promise<TaskBatchDeleteResponse> {
+  const response = await api.post<TaskBatchDeleteResponse>(pluginPath(pluginId, 'tasks/delete-batch'), {
+    task_ids: options.taskIds || [],
+    all_matching: Boolean(options.allMatching),
+    statuses: options.statuses || [],
+    search: options.search?.trim() || null,
+  })
+  if (!response?.success) throw new Error(responseMessage(response) || '批量删除任务失败')
   return response
 }
 

@@ -401,7 +401,7 @@ class TaskCoordinator:
         self,
         entries: list[tuple[SubtitleTask, TaskWorkItem]],
     ) -> TaskBatchResumeResult:
-        """一次持久化恢复中断任务，并交由既有受限 worker 池处理。"""
+        """一次持久化重置可重试终态任务，并交由既有受限 worker 池处理。"""
 
         if not self._accepting:
             return TaskBatchResumeResult(accepting=False)
@@ -468,7 +468,7 @@ class TaskCoordinator:
 
         if resumed:
             logger.info(
-                f"已批量恢复 {len(resumed)} 条中断字幕任务并加入受限队列，"
+                f"已批量重新运行 {len(resumed)} 条字幕任务并加入受限队列，"
                 f"同路径合并 {merged_count} 条"
             )
         return TaskBatchResumeResult(

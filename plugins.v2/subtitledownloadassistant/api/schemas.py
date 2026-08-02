@@ -107,6 +107,7 @@ class TaskPage(ApiModel):
     total: int
     page: int
     page_size: PageSize
+    status_counts: dict[TaskStatus, int] = Field(default_factory=dict)
 
 
 class TaskClearResponse(ApiModel):
@@ -119,25 +120,33 @@ class TaskClearResponse(ApiModel):
 
 
 class TaskBatchRetryRequest(ApiModel):
-    """按显式任务 ID 或当前搜索条件恢复已中断任务。"""
+    """按显式任务 ID 或当前搜索分组重新运行可重试任务。"""
 
     task_ids: list[str] = Field(default_factory=list, max_length=100)
-    all_interrupted: bool = False
+    all_matching: bool = False
+    statuses: list[TaskStatus] = Field(default_factory=list, max_length=3)
     search: str | None = Field(default=None, max_length=500)
 
     @model_validator(mode="after")
     def validate_scope(self) -> "TaskBatchRetryRequest":
-        """要求显式选择与全部中断范围二选一。"""
+        """要求显式选择与状态分组二选一，并限制为可重试状态。"""
 
-        if self.all_interrupted == bool(self.task_ids):
-            raise ValueError("必须选择任务 ID，或指定恢复全部已中断任务")
+        if self.all_matching == bool(self.task_ids):
+            raise ValueError("必须选择任务 ID，或指定重新运行当前状态分组")
         if len(self.task_ids) != len(set(self.task_ids)):
             raise ValueError("同一任务不能重复提交")
+        retryable = {TaskStatus.SKIPPED, TaskStatus.FAILED, TaskStatus.INTERRUPTED}
+        if any(status not in retryable for status in self.statuses):
+            raise ValueError("只有已跳过、失败或已中断的任务可以批量重新运行")
+        if self.all_matching and not self.statuses:
+            raise ValueError("重新运行状态分组时必须指定至少一个可重试状态")
+        if self.task_ids and self.statuses:
+            raise ValueError("按任务 ID 重新运行时不能同时指定状态分组")
         return self
 
 
 class TaskBatchRetryResponse(ApiModel):
-    """一次批量恢复已中断任务的提交摘要。"""
+    """一次批量重新运行任务的提交摘要。"""
 
     success: bool = True
     message: str
@@ -149,6 +158,50 @@ class TaskBatchRetryResponse(ApiModel):
     skipped_count: int = Field(ge=0)
     missing_count: int = Field(ge=0)
     error_count: int = Field(ge=0)
+
+
+class TaskBatchDeleteRequest(ApiModel):
+    """按显式任务 ID 或当前搜索分组删除终态任务。"""
+
+    task_ids: list[str] = Field(default_factory=list, max_length=100)
+    all_matching: bool = False
+    statuses: list[TaskStatus] = Field(default_factory=list, max_length=4)
+    search: str | None = Field(default=None, max_length=500)
+
+    @model_validator(mode="after")
+    def validate_scope(self) -> "TaskBatchDeleteRequest":
+        """要求显式选择与状态分组二选一，并拒绝运行中状态。"""
+
+        if self.all_matching == bool(self.task_ids):
+            raise ValueError("必须选择任务 ID，或指定删除当前状态分组")
+        if len(self.task_ids) != len(set(self.task_ids)):
+            raise ValueError("同一任务不能重复提交")
+        terminal = {
+            TaskStatus.SUCCESS,
+            TaskStatus.SKIPPED,
+            TaskStatus.FAILED,
+            TaskStatus.INTERRUPTED,
+        }
+        if any(status not in terminal for status in self.statuses):
+            raise ValueError("等待中或处理中的任务不能批量删除")
+        if self.all_matching and not self.statuses:
+            raise ValueError("删除状态分组时必须指定至少一个终态状态")
+        if self.task_ids and self.statuses:
+            raise ValueError("按任务 ID 删除时不能同时指定状态分组")
+        return self
+
+
+class TaskBatchDeleteResponse(ApiModel):
+    """一次批量删除终态任务的结果摘要。"""
+
+    success: bool = True
+    message: str
+    requested_count: int = Field(ge=0)
+    matched_count: int = Field(ge=0)
+    deleted_count: int = Field(ge=0)
+    skipped_count: int = Field(ge=0)
+    missing_count: int = Field(ge=0)
+    active_count: int = Field(ge=0)
 
 
 class CustomDirectoryScanResponse(ApiModel):

@@ -120,8 +120,8 @@ class StorePort(Protocol):
     async def delete_task(self, task_id: str) -> bool:
         """删除指定任务。"""
 
-    async def delete_terminal_tasks(self) -> int:
-        """删除全部终态任务并返回删除数量。"""
+    async def delete_terminal_tasks(self, task_ids: set[str] | None = None) -> int:
+        """删除全部或指定终态任务并返回删除数量。"""
 
     async def list_records(self) -> list[MatchRecord]:
         """返回全部匹配记录快照。"""

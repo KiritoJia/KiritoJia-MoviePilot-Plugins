@@ -370,18 +370,23 @@ class PluginStore:
                 self._tasks = candidate
             return True
 
-    async def delete_terminal_tasks(self) -> int:
-        """一次持久化删除全部终态任务，保留等待中和处理中的任务。"""
+    async def delete_terminal_tasks(self, task_ids: set[str] | None = None) -> int:
+        """一次持久化删除全部或指定终态任务，保留等待中和处理中的任务。"""
 
         async with self._async_mutation_lock:
             with self._lock:
-                deleted_count = sum(1 for task in self._tasks.values() if task.is_terminal)
+                deleted_ids = {
+                    task_id
+                    for task_id, task in self._tasks.items()
+                    if task.is_terminal and (task_ids is None or task_id in task_ids)
+                }
+                deleted_count = len(deleted_ids)
                 if deleted_count == 0:
                     return 0
                 candidate = {
                     task_id: task
                     for task_id, task in self._tasks.items()
-                    if not task.is_terminal
+                    if task_id not in deleted_ids
                 }
                 items = self._task_values(candidate)
             await self._persist_partition(self.TASKS_KEY, items)
