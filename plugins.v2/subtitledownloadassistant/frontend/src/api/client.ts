@@ -211,7 +211,7 @@ export async function refreshSourceStatus(api: PluginApi, pluginId: string): Pro
 export async function updateCredentials(
   api: PluginApi,
   pluginId: string,
-  source: Extract<SubtitleSource, 'opensubtitles' | 'assrt'>,
+  source: Extract<SubtitleSource, 'opensubtitles' | 'assrt' | 'subhd'>,
   payload: Record<string, string>,
 ): Promise<CredentialUpdateResponse> {
   if (!api.put) throw new Error('当前 MoviePilot 前端不支持凭据更新')
@@ -222,7 +222,7 @@ export async function updateCredentials(
 export async function clearCredentials(
   api: PluginApi,
   pluginId: string,
-  source: Extract<SubtitleSource, 'opensubtitles' | 'assrt'>,
+  source: Extract<SubtitleSource, 'opensubtitles' | 'assrt' | 'subhd'>,
 ): Promise<StandardResponse> {
   if (!api.delete) throw new Error('当前 MoviePilot 前端不支持凭据清除')
   return api.delete<StandardResponse>(pluginPath(pluginId, `credentials/${source}`))

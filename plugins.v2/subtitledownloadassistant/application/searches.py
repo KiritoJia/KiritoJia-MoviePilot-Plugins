@@ -39,6 +39,7 @@ SOURCE_NAMES = {
     SubtitleSource.ASSRT: "ASSRT",
     SubtitleSource.SHOOTER: "射手网",
     SubtitleSource.THUNDER: "迅雷影音",
+    SubtitleSource.SUBHD: "SubHD",
 }
 
 QUERY_TYPE_NAMES = {

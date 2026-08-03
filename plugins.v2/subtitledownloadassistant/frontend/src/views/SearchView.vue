@@ -14,7 +14,7 @@ const emit = defineEmits<{ action: [] }>()
 const toast = inject<HostToast | null>('moviepilot:toast', null)
 
 const target = ref<TargetItem | null>(null)
-const keywords = ref<Record<SubtitleSource, string>>({ moviepilot: '', opensubtitles: '', assrt: '', shooter: '', thunder: '' })
+const keywords = ref<Record<SubtitleSource, string>>({ moviepilot: '', opensubtitles: '', assrt: '', shooter: '', thunder: '', subhd: '' })
 const response = ref<SearchResponse | null>(null)
 const searchedConditions = ref('')
 const loading = ref(false)
@@ -23,7 +23,7 @@ const error = ref('')
 const notice = ref('')
 const openSources = ref<number[]>([])
 
-const sourceOrder: SubtitleSource[] = ['moviepilot', 'opensubtitles', 'assrt', 'shooter', 'thunder']
+const sourceOrder: SubtitleSource[] = ['moviepilot', 'opensubtitles', 'assrt', 'shooter', 'thunder', 'subhd']
 const groups = computed<SearchSourceGroup[]>(() => sourceOrder.map(source => response.value?.sources.find(item => item.source === source)).filter(Boolean) as SearchSourceGroup[])
 const currentConditions = computed(() => JSON.stringify({
   target: target.value?.history_id || null,
@@ -48,6 +48,7 @@ async function search(): Promise<void> {
       assrt_keyword: cleanKeyword(keywords.value.assrt),
       shooter_keyword: cleanKeyword(keywords.value.shooter),
       thunder_keyword: cleanKeyword(keywords.value.thunder),
+      subhd_keyword: cleanKeyword(keywords.value.subhd),
     })
     openSources.value = groups.value.flatMap((group, index) => group.candidate_count > 0 ? [index] : [])
     searchedConditions.value = currentConditions.value

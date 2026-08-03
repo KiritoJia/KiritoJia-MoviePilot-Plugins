@@ -381,6 +381,7 @@ class ManualSearchRequest(ApiModel):
     assrt_keyword: str | None = Field(default=None, max_length=512)
     shooter_keyword: str | None = Field(default=None, max_length=512)
     thunder_keyword: str | None = Field(default=None, max_length=512)
+    subhd_keyword: str | None = Field(default=None, max_length=512)
 
 
 class ManualCandidateItem(ApiModel):
@@ -555,6 +556,7 @@ class CredentialUpdate(ApiModel):
     """外部字幕源凭据增量更新请求。"""
 
     api_key: str | None = Field(default=None, max_length=512)
+    email: str | None = Field(default=None, max_length=512)
     username: str | None = Field(default=None, max_length=512)
     password: str | None = Field(default=None, max_length=2048)
     token: str | None = Field(default=None, max_length=2048)
@@ -565,7 +567,7 @@ class CredentialUpdate(ApiModel):
 
         if not any(
             isinstance(value, str) and bool(value.strip())
-            for value in (self.api_key, self.username, self.password, self.token)
+            for value in (self.api_key, self.email, self.username, self.password, self.token)
         ):
             raise ValueError("至少提供一个非空凭据字段")
         return self

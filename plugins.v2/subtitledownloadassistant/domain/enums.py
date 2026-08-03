@@ -52,6 +52,7 @@ class SubtitleSource(StrEnum):
     ASSRT = "assrt"
     SHOOTER = "shooter"
     THUNDER = "thunder"
+    SUBHD = "subhd"
 
 
 class PackageScope(StrEnum):

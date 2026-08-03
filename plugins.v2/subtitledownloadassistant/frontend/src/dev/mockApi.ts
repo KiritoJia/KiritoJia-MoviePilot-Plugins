@@ -290,6 +290,7 @@ function seedState(): MockState {
     { source: 'assrt', enabled: true, configured: true, health: 'limited', last_checked_at: iso(70_000), last_success_at: iso(80_000), last_error_at: iso(65_000), last_error_summary: '达到当前窗口请求上限，稍后可重试。', last_duration_ms: 1200, details: { quota: '3 / 5', cooldown_until: iso(-20_000), last_request_at: iso(70_000) } },
     { source: 'shooter', enabled: true, configured: true, health: 'healthy', last_checked_at: iso(60_000), last_success_at: iso(60_000), last_error_at: null, last_error_summary: null, last_duration_ms: 360, details: { fingerprint_input: 'local', fingerprint_transport: '本地文件' } },
     { source: 'thunder', enabled: true, configured: true, health: 'healthy', last_checked_at: iso(55_000), last_success_at: iso(55_000), last_error_at: null, last_error_summary: null, last_duration_ms: 480, details: { fingerprint_available: true, content_hash_match_count: 1 } },
+    { source: 'subhd', enabled: false, configured: false, health: 'disabled', last_checked_at: null, last_success_at: null, last_error_at: null, last_error_summary: null, last_duration_ms: null, details: { session_active: false } },
   ]
 
   const targets: TargetItem[] = tasks.map(task => ({
@@ -310,17 +311,18 @@ function seedState(): MockState {
       assrt: [{ kind: 'title', label: '中文标题', query: task.media_title, editable: true }],
       shooter: [{ kind: 'fingerprint', label: '视频内容指纹', query: task.target_file_name, editable: true }],
       thunder: [{ kind: 'filename', label: '媒体文件名', query: task.target_file_name, editable: true }],
+      subhd: [{ kind: 'filename', label: '媒体文件名', query: task.target_file_name, editable: true }],
     },
   }))
 
   return {
     mode: 'normal',
     config: {
-      plugin_id: 'SubtitleDownloadAssistant', enabled: true, moviepilot_enabled: true, opensubtitles_enabled: false, assrt_enabled: true, shooter_enabled: true, thunder_enabled: true,
+      plugin_id: 'SubtitleDownloadAssistant', enabled: true, moviepilot_enabled: true, opensubtitles_enabled: false, assrt_enabled: true, shooter_enabled: true, thunder_enabled: true, subhd_enabled: false, subhd_base_url: 'https://subhd.tv',
       custom_media_directories: ['/media/strm'],
       directory_monitor_enabled: true, directory_monitor_interval: 60,
-      opensubtitles_configured: false, assrt_configured: true, allow_machine_translation: false, ai_attribution_takeover_enabled: false, host_ai_enabled: true, max_concurrent_tasks: 2, max_candidate_attempts: 3,
-      source_priority: ['shooter', 'thunder', 'moviepilot', 'assrt', 'opensubtitles'], format_priority: ['ASS', 'SSA', 'SRT', 'SUP'],
+      opensubtitles_configured: false, assrt_configured: true, subhd_configured: false, allow_machine_translation: false, ai_attribution_takeover_enabled: false, host_ai_enabled: true, max_concurrent_tasks: 2, max_candidate_attempts: 3,
+      source_priority: ['shooter', 'thunder', 'moviepilot', 'assrt', 'opensubtitles', 'subhd'], format_priority: ['ASS', 'SSA', 'SRT', 'SUP'],
       path_mappings: [{ source_prefix: '/legacy/media', target_prefix: '/media' }], package_attribution_strategy: 'trust_package',
       allowed_formats: ['ASS', 'SSA', 'SRT', 'SUP'],
     },
@@ -800,6 +802,7 @@ function mockSearchResponse(target: TargetItem): SearchResponse {
       { source: 'assrt', status: 'success', default_plans: target.search_plans.assrt, executed_queries: [target.media_title], matched_query: null, candidate_count: 0, duration_ms: 280, error_summary: null, details: { cache_hit: false }, candidates: [] },
       { source: 'shooter', status: 'success', default_plans: target.search_plans.shooter, executed_queries: [target.target_file_name], matched_query: target.target_file_name, candidate_count: 0, duration_ms: 350, error_summary: null, details: { fingerprint_input: 'local' }, candidates: [] },
       { source: 'thunder', status: 'success', default_plans: target.search_plans.thunder, executed_queries: [target.target_file_name], matched_query: target.target_file_name, candidate_count: 0, duration_ms: 460, error_summary: null, details: { fingerprint_available: true }, candidates: [] },
+      { source: 'subhd', status: 'disabled', default_plans: target.search_plans.subhd, executed_queries: [], matched_query: null, candidate_count: 0, duration_ms: null, error_summary: null, details: { session_active: false }, candidates: [] },
     ],
   }
 }

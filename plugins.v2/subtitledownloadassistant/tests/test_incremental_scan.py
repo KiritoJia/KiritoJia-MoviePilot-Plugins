@@ -111,6 +111,7 @@ def _load_plugin_class():
         "sources.moviepilot": {"MoviePilotSource": object},
         "sources.opensubtitles": {"OpenSubtitlesSource": object},
         "sources.shooter": {"ShooterSource": object},
+        "sources.subhd": {"SubHDSource": object},
         "sources.thunder": {"ThunderSource": object},
     }
     for suffix, values in stubs.items():

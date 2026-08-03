@@ -18,7 +18,7 @@ export type TaskStage = 'preflight' | 'inventory' | 'search' | 'download' | 'ext
 export type RecordStatus = 'matched' | 'staged' | 'unmatched'
 export type RecordDeleteMode = 'record_only' | 'record_and_file'
 export const MAX_RECORD_BATCH_SIZE = 100
-export type SubtitleSource = 'moviepilot' | 'opensubtitles' | 'assrt' | 'shooter' | 'thunder'
+export type SubtitleSource = 'moviepilot' | 'opensubtitles' | 'assrt' | 'shooter' | 'thunder' | 'subhd'
 export type PackageScope = 'season_pack' | 'episode' | 'unknown'
 export type TranslationType = 'human' | 'unknown' | 'machine' | 'ai'
 export type SourceHealth = 'pending' | 'healthy' | 'limited' | 'error' | 'disabled'
@@ -58,8 +58,11 @@ export interface ConfigModel {
   assrt_enabled: boolean
   shooter_enabled: boolean
   thunder_enabled: boolean
+  subhd_enabled: boolean
+  subhd_base_url: string
   opensubtitles_configured: boolean
   assrt_configured: boolean
+  subhd_configured: boolean
   allow_machine_translation: boolean
   max_concurrent_tasks: number
   /** 匹配失败时是否允许插件请求字幕归属 AI 接管。 */
@@ -88,6 +91,8 @@ export type NonSensitiveConfig = Pick<
   | 'assrt_enabled'
   | 'shooter_enabled'
   | 'thunder_enabled'
+  | 'subhd_enabled'
+  | 'subhd_base_url'
   | 'allow_machine_translation'
   | 'max_concurrent_tasks'
   | 'ai_attribution_takeover_enabled'
@@ -361,6 +366,7 @@ export interface SearchRequest {
   assrt_keyword?: string | null
   shooter_keyword?: string | null
   thunder_keyword?: string | null
+  subhd_keyword?: string | null
 }
 
 export type ManualSourceResult = 'success' | 'limited' | 'error' | 'disabled' | 'unconfigured'

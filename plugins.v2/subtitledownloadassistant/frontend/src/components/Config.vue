@@ -29,7 +29,7 @@ const emit = defineEmits<{
 }>()
 const toast = inject<HostToast | null>('moviepilot:toast', null)
 
-type ExternalSource = 'opensubtitles' | 'assrt'
+type ExternalSource = 'opensubtitles' | 'assrt' | 'subhd'
 type SourceMeta = { source: SubtitleSource; icon: string }
 
 const sourceMeta: SourceMeta[] = [
@@ -38,8 +38,9 @@ const sourceMeta: SourceMeta[] = [
   { source: 'assrt', icon: 'mdi-subtitles-outline' },
   { source: 'shooter', icon: 'mdi-target' },
   { source: 'thunder', icon: 'mdi-flash-outline' },
+  { source: 'subhd', icon: 'mdi-web' },
 ]
-const defaultSources: SubtitleSource[] = ['shooter', 'thunder', 'moviepilot', 'assrt', 'opensubtitles']
+const defaultSources: SubtitleSource[] = ['shooter', 'thunder', 'moviepilot', 'assrt', 'opensubtitles', 'subhd']
 const defaultFormats = ['ASS', 'SSA', 'SRT', 'SUP']
 const attributionOptions: Array<{ title: string; value: PackageAttributionStrategy }> = [
   { title: '信任候选包', value: 'trust_package' },
@@ -53,6 +54,8 @@ const form = reactive<{
   assrt_enabled: boolean
   shooter_enabled: boolean
   thunder_enabled: boolean
+  subhd_enabled: boolean
+  subhd_base_url: string
   allow_machine_translation: boolean
   ai_attribution_takeover_enabled: boolean
   directory_monitor_enabled: boolean
@@ -67,6 +70,8 @@ const form = reactive<{
   assrt_enabled: false,
   shooter_enabled: false,
   thunder_enabled: false,
+  subhd_enabled: false,
+  subhd_base_url: 'https://subhd.tv',
   allow_machine_translation: false,
   ai_attribution_takeover_enabled: false,
   directory_monitor_enabled: true,
@@ -83,9 +88,11 @@ const formatPriority = ref<string[]>([...defaultFormats])
 const allowedFormats = ref<string[]>([...defaultFormats])
 const opensubtitlesConfigured = ref(false)
 const assrtConfigured = ref(false)
+const subhdConfigured = ref(false)
 const credentials = reactive({
   opensubtitles: { api_key: '', username: '', password: '' },
   assrt: { token: '' },
+  subhd: { email: '', password: '' },
 })
 const openSource = ref<SubtitleSource | null>(null)
 const advancedOpen = ref<string | null>(null)
@@ -96,6 +103,7 @@ const saveError = ref('')
 const showApiKey = ref(false)
 const showPassword = ref(false)
 const showAssrtToken = ref(false)
+const showSubhdPassword = ref(false)
 const clearOpen = ref(false)
 const clearSource = ref<ExternalSource | null>(null)
 const clearing = ref(false)
@@ -114,10 +122,25 @@ const hostAiEnabled = computed(() => Boolean(
 const osDraftValues = computed(() => Object.values(credentials.opensubtitles).map(value => value.trim()))
 const hasOsUpdate = computed(() => osDraftValues.value.some(Boolean))
 const hasAssrtUpdate = computed(() => Boolean(credentials.assrt.token.trim()))
+const subhdDraftValues = computed(() => Object.values(credentials.subhd).map(value => value.trim()))
+const hasSubhdUpdate = computed(() => subhdDraftValues.value.some(Boolean))
 const osComplete = computed(() => opensubtitlesConfigured.value || osDraftValues.value.every(Boolean))
 const assrtComplete = computed(() => assrtConfigured.value || hasAssrtUpdate.value)
+const subhdComplete = computed(() => subhdConfigured.value || subhdDraftValues.value.every(Boolean))
 const osError = computed(() => form.opensubtitles_enabled && !osComplete.value ? '启用前需提供 API Key、用户名和密码。' : '')
 const assrtError = computed(() => form.assrt_enabled && !assrtComplete.value ? '启用前需提供 ASSRT Token。' : '')
+const subhdError = computed(() => form.subhd_enabled && !subhdComplete.value ? '启用前需提供 SubHD 邮箱和密码。' : '')
+const subhdBaseUrlError = computed(() => {
+  const value = form.subhd_base_url.trim()
+  try {
+    const url = new URL(value)
+    if (!['http:', 'https:'].includes(url.protocol) || !url.hostname) throw new Error('invalid')
+    if (url.username || url.password || (url.pathname && url.pathname !== '/') || url.search || url.hash) throw new Error('invalid')
+    return ''
+  } catch {
+    return 'SubHD 服务地址需填写完整 HTTP/HTTPS 网址，且不能包含路径、账号或查询参数。'
+  }
+})
 const attemptsError = computed(() => {
   const value = Number(form.max_candidate_attempts)
   return Number.isInteger(value) && value >= 1 && value <= 10 ? '' : '最大尝试数必须是 1 到 10 的整数。'
@@ -180,11 +203,15 @@ const directoryPickerInitialPath = computed(() => {
     : customMediaDirectories.value[index]
   return value && isAbsolutePath(value.trim()) ? value.trim() : '/'
 })
-const canSave = computed(() => !saving.value && !clearing.value && !osError.value && !assrtError.value && !concurrentTasksError.value && !attemptsError.value && !monitorIntervalError.value && !pathMappingsError.value && !customDirectoriesError.value)
-const clearTitle = computed(() => clearSource.value === 'opensubtitles' ? '清除 OpenSubtitles 凭据' : '清除 ASSRT 凭据')
+const canSave = computed(() => !saving.value && !clearing.value && !osError.value && !assrtError.value && !subhdError.value && !subhdBaseUrlError.value && !concurrentTasksError.value && !attemptsError.value && !monitorIntervalError.value && !pathMappingsError.value && !customDirectoriesError.value)
+const clearTitle = computed(() => clearSource.value === 'opensubtitles'
+  ? '清除 OpenSubtitles 凭据'
+  : clearSource.value === 'subhd' ? '清除 SubHD 凭据' : '清除 ASSRT 凭据')
 const clearMessage = computed(() => clearSource.value === 'opensubtitles'
   ? '将永久删除 API Key、用户名、密码和当前登录会话，并立即关闭 OpenSubtitles 来源。旧凭据无法恢复。'
-  : '将永久删除 ASSRT Token，并立即关闭 ASSRT 来源。旧 Token 无法恢复。')
+  : clearSource.value === 'subhd'
+    ? '将永久删除 SubHD 邮箱、密码和当前登录会话，并立即关闭 SubHD 来源。旧凭据无法恢复。'
+    : '将永久删除 ASSRT Token，并立即关闭 ASSRT 来源。旧 Token 无法恢复。')
 
 watch(() => props.initialConfig, applyInitialConfig, { immediate: true, deep: true })
 onMounted(() => emit('layout', { maxWidth: '72rem' }))
@@ -197,6 +224,8 @@ function applyInitialConfig(): void {
   form.assrt_enabled = Boolean(initial.assrt_enabled)
   form.shooter_enabled = Boolean(initial.shooter_enabled)
   form.thunder_enabled = Boolean(initial.thunder_enabled)
+  form.subhd_enabled = Boolean(initial.subhd_enabled)
+  form.subhd_base_url = String(initial.subhd_base_url || 'https://subhd.tv')
   form.allow_machine_translation = Boolean(initial.allow_machine_translation)
   form.ai_attribution_takeover_enabled = Boolean(initial.ai_attribution_takeover_enabled)
   form.directory_monitor_enabled = initial.directory_monitor_enabled !== false
@@ -211,6 +240,7 @@ function applyInitialConfig(): void {
   savedCustomMediaDirectories.value = [...customMediaDirectories.value]
   opensubtitlesConfigured.value = Boolean(initial.opensubtitles_configured)
   assrtConfigured.value = Boolean(initial.assrt_configured)
+  subhdConfigured.value = Boolean(initial.subhd_configured)
 
   const normalizedAllowed = normalizeFormats(initial.allowed_formats)
   allowedFormats.value = normalizedAllowed.length ? normalizedAllowed : [...defaultFormats]
@@ -344,18 +374,20 @@ function pathMappingFieldError(index: number, field: keyof PathMapping): string 
   return ''
 }
 
-function enabledKey(source: SubtitleSource): 'moviepilot_enabled' | 'opensubtitles_enabled' | 'assrt_enabled' | 'shooter_enabled' | 'thunder_enabled' {
-  return `${source}_enabled` as 'moviepilot_enabled' | 'opensubtitles_enabled' | 'assrt_enabled' | 'shooter_enabled' | 'thunder_enabled'
+function enabledKey(source: SubtitleSource): 'moviepilot_enabled' | 'opensubtitles_enabled' | 'assrt_enabled' | 'shooter_enabled' | 'thunder_enabled' | 'subhd_enabled' {
+  return `${source}_enabled` as 'moviepilot_enabled' | 'opensubtitles_enabled' | 'assrt_enabled' | 'shooter_enabled' | 'thunder_enabled' | 'subhd_enabled'
 }
 
 function configured(source: SubtitleSource): boolean {
   if (source === 'moviepilot' || source === 'shooter' || source === 'thunder') return true
-  return source === 'opensubtitles' ? opensubtitlesConfigured.value : assrtConfigured.value
+  if (source === 'opensubtitles') return opensubtitlesConfigured.value
+  return source === 'subhd' ? subhdConfigured.value : assrtConfigured.value
 }
 
 function sourceValidation(source: SubtitleSource): string {
   if (source === 'opensubtitles') return osError.value
   if (source === 'assrt') return assrtError.value
+  if (source === 'subhd') return subhdError.value
   return ''
 }
 
@@ -374,6 +406,8 @@ function nonSensitiveConfig(): NonSensitiveConfig {
     assrt_enabled: form.assrt_enabled,
     shooter_enabled: form.shooter_enabled,
     thunder_enabled: form.thunder_enabled,
+    subhd_enabled: form.subhd_enabled,
+    subhd_base_url: form.subhd_base_url.trim().replace(/\/+$/, ''),
     allow_machine_translation: form.allow_machine_translation,
     ai_attribution_takeover_enabled: form.ai_attribution_takeover_enabled,
     directory_monitor_enabled: form.directory_monitor_enabled,
@@ -394,10 +428,10 @@ function nonSensitiveConfig(): NonSensitiveConfig {
 async function saveConfig(): Promise<void> {
   saveError.value = ''
   if (!canSave.value) {
-    saveError.value = osError.value || assrtError.value || concurrentTasksError.value || attemptsError.value || monitorIntervalError.value || pathMappingsError.value || customDirectoriesError.value || '请修正配置后再保存。'
+    saveError.value = osError.value || assrtError.value || subhdError.value || subhdBaseUrlError.value || concurrentTasksError.value || attemptsError.value || monitorIntervalError.value || pathMappingsError.value || customDirectoriesError.value || '请修正配置后再保存。'
     return
   }
-  if (!hasOsUpdate.value && !hasAssrtUpdate.value) {
+  if (!hasOsUpdate.value && !hasAssrtUpdate.value && !hasSubhdUpdate.value) {
     emit('save', nonSensitiveConfig())
     return
   }
@@ -420,6 +454,15 @@ async function saveConfig(): Promise<void> {
     if (hasAssrtUpdate.value) {
       const response = await updateCredentials(props.api, pluginId.value, 'assrt', { token: credentials.assrt.token.trim() })
       assrtConfigured.value = Boolean(response.data?.configured)
+    }
+    if (hasSubhdUpdate.value) {
+      const payload = Object.fromEntries(
+        Object.entries(credentials.subhd)
+          .map(([key, value]) => [key, value.trim()])
+          .filter(([, value]) => Boolean(value)),
+      )
+      const response = await updateCredentials(props.api, pluginId.value, 'subhd', payload)
+      subhdConfigured.value = Boolean(response.data?.configured)
     }
     clearCredentialDrafts()
     showNotice('凭据已更新', 'success')
@@ -462,9 +505,12 @@ function clearCredentialDrafts(): void {
   credentials.opensubtitles.username = ''
   credentials.opensubtitles.password = ''
   credentials.assrt.token = ''
+  credentials.subhd.email = ''
+  credentials.subhd.password = ''
   showApiKey.value = false
   showPassword.value = false
   showAssrtToken.value = false
+  showSubhdPassword.value = false
 }
 
 function requestClear(source: ExternalSource): void {
@@ -489,10 +535,15 @@ async function confirmClear(): Promise<void> {
       credentials.opensubtitles.api_key = ''
       credentials.opensubtitles.username = ''
       credentials.opensubtitles.password = ''
-    } else {
+    } else if (source === 'assrt') {
       assrtConfigured.value = false
       form.assrt_enabled = false
       credentials.assrt.token = ''
+    } else {
+      subhdConfigured.value = false
+      form.subhd_enabled = false
+      credentials.subhd.email = ''
+      credentials.subhd.password = ''
     }
     clearOpen.value = false
     clearSource.value = null
@@ -689,8 +740,8 @@ function showNotice(text: string, color: 'success' | 'error' | 'warning'): void 
       <section id="source-settings" class="config-section source-section" aria-labelledby="source-settings-title">
         <div class="section-heading"><VIcon icon="mdi-database-outline" /><div><h3 id="source-settings-title">字幕源</h3></div></div>
         <div class="section-content">
-          <VAlert v-if="osError || assrtError" type="error" variant="tonal" density="compact" class="mb-3">
-            {{ [osError, assrtError].filter(Boolean).join(' ') }}
+          <VAlert v-if="osError || assrtError || subhdError" type="error" variant="tonal" density="compact" class="mb-3">
+            {{ [osError, assrtError, subhdError].filter(Boolean).join(' ') }}
           </VAlert>
           <div class="source-config-list">
             <div v-for="meta in sourceMeta" :key="meta.source" class="source-config-row" :class="{ 'source-config-row--open': openSource === meta.source }">
@@ -770,6 +821,45 @@ function showNotice(text: string, color: 'success' | 'error' | 'warning'): void 
                     </template>
                   </VTextField>
                   <div class="credential-actions"><VBtn variant="text" color="error" prepend-icon="mdi-key-remove" :disabled="!assrtConfigured || clearing" @click="requestClear('assrt')">清除凭据</VBtn></div>
+                </div>
+
+                <div v-else-if="meta.source === 'subhd'" class="credential-fields">
+                  <VTextField
+                    v-model="form.subhd_base_url"
+                    label="SubHD 服务地址"
+                    placeholder="https://subhd.tv"
+                    prepend-inner-icon="mdi-link-variant"
+                    :error-messages="subhdBaseUrlError ? [subhdBaseUrlError] : []"
+                  />
+                  <VTextField
+                    v-model="credentials.subhd.email"
+                    label="邮箱"
+                    type="email"
+                    autocomplete="off"
+                    placeholder="留空则保留现有值"
+                  />
+                  <VTextField
+                    v-model="credentials.subhd.password"
+                    label="密码"
+                    :type="showSubhdPassword ? 'text' : 'password'"
+                    autocomplete="new-password"
+                    placeholder="留空则保留现有值"
+                  >
+                    <template #append-inner>
+                      <VBtn
+                        :icon="showSubhdPassword ? 'mdi-eye-off-outline' : 'mdi-eye-outline'"
+                        size="small"
+                        variant="text"
+                        :aria-label="showSubhdPassword ? '隐藏 SubHD 密码' : '显示 SubHD 密码'"
+                        @click="showSubhdPassword = !showSubhdPassword"
+                      />
+                    </template>
+                  </VTextField>
+                  <div class="source-body-note">
+                    <VIcon icon="mdi-shield-lock-outline" size="20" />
+                    <span>登录会话仅保存在当前运行内存；插件不会展示密码或 Cookie。</span>
+                  </div>
+                  <div class="credential-actions"><VBtn variant="text" color="error" prepend-icon="mdi-key-remove" :disabled="!subhdConfigured || clearing" @click="requestClear('subhd')">清除凭据</VBtn></div>
                 </div>
 
                 <div v-else class="source-body-note">

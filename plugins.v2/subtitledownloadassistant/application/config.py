@@ -5,10 +5,31 @@ from __future__ import annotations
 import os
 from dataclasses import dataclass, field
 from typing import Any
+from urllib.parse import urlparse
 
 from ..domain.enums import PackageAttributionStrategy, SubtitleSource
 from ..domain.language import normalize_format_priority
 from .path_mapping import PathMapping, validate_path_mappings
+
+DEFAULT_SUBHD_BASE_URL = "https://subhd.tv"
+
+
+def normalize_subhd_base_url(value: Any) -> str:
+    """校验 SubHD 官方站、镜像或反向代理的服务根地址。"""
+
+    text = str(value or DEFAULT_SUBHD_BASE_URL).strip().rstrip("/")
+    parsed = urlparse(text)
+    if parsed.scheme not in {"http", "https"} or not parsed.hostname:
+        raise ValueError("SubHD 服务地址必须是完整的 HTTP 或 HTTPS 网址")
+    if parsed.username or parsed.password:
+        raise ValueError("SubHD 服务地址不能包含用户名或密码")
+    if parsed.path not in {"", "/"} or parsed.query or parsed.fragment:
+        raise ValueError("SubHD 服务地址只能填写协议、域名和可选端口")
+    try:
+        parsed.port
+    except ValueError as exc:
+        raise ValueError("SubHD 服务地址端口无效") from exc
+    return text
 
 
 def normalize_custom_media_directories(values: Any) -> tuple[str, ...]:
@@ -49,11 +70,13 @@ class PluginConfig:
     assrt_enabled: bool = False
     shooter_enabled: bool = False
     thunder_enabled: bool = False
+    subhd_enabled: bool = False
+    subhd_base_url: str = DEFAULT_SUBHD_BASE_URL
     allow_machine_translation: bool = False
     max_concurrent_tasks: int = 2
     max_candidate_attempts: int = 3
     source_priority: list[str] = field(
-        default_factory=lambda: ["shooter", "thunder", "moviepilot", "assrt", "opensubtitles"]
+        default_factory=lambda: ["shooter", "thunder", "moviepilot", "assrt", "opensubtitles", "subhd"]
     )
     format_priority: list[str] = field(default_factory=list)
     path_mappings: tuple[PathMapping, ...] = field(default_factory=tuple)
@@ -76,6 +99,7 @@ class PluginConfig:
             "moviepilot",
             "assrt",
             "opensubtitles",
+            "subhd",
         ]:
             normalized = str(item).strip().lower()
             if normalized in {source.value for source in SubtitleSource} and normalized not in source_order:
@@ -108,6 +132,8 @@ class PluginConfig:
             assrt_enabled=bool(values.get("assrt_enabled", False)),
             shooter_enabled=bool(values.get("shooter_enabled", False)),
             thunder_enabled=bool(values.get("thunder_enabled", False)),
+            subhd_enabled=bool(values.get("subhd_enabled", False)),
+            subhd_base_url=normalize_subhd_base_url(values.get("subhd_base_url")),
             allow_machine_translation=bool(values.get("allow_machine_translation", False)),
             max_concurrent_tasks=min(4, max(1, concurrent_tasks)),
             max_candidate_attempts=min(10, max(1, attempts)),
@@ -130,6 +156,7 @@ class PluginConfig:
             SubtitleSource.ASSRT: self.assrt_enabled,
             SubtitleSource.SHOOTER: self.shooter_enabled,
             SubtitleSource.THUNDER: self.thunder_enabled,
+            SubtitleSource.SUBHD: self.subhd_enabled,
         }
 
     def saved_payload(self) -> dict[str, Any]:
@@ -142,6 +169,8 @@ class PluginConfig:
             "assrt_enabled": self.assrt_enabled,
             "shooter_enabled": self.shooter_enabled,
             "thunder_enabled": self.thunder_enabled,
+            "subhd_enabled": self.subhd_enabled,
+            "subhd_base_url": self.subhd_base_url,
             "allow_machine_translation": self.allow_machine_translation,
             "max_concurrent_tasks": self.max_concurrent_tasks,
             "max_candidate_attempts": self.max_candidate_attempts,
@@ -161,6 +190,7 @@ class PluginConfig:
         allowed_formats: list[str],
         opensubtitles_configured: bool,
         assrt_configured: bool,
+        subhd_configured: bool,
         host_ai_enabled: bool = False,
     ) -> dict[str, Any]:
         """返回 Vue Config 使用且不含秘密的初始模型。"""
@@ -170,6 +200,7 @@ class PluginConfig:
             **self.saved_payload(),
             "opensubtitles_configured": opensubtitles_configured,
             "assrt_configured": assrt_configured,
+            "subhd_configured": subhd_configured,
             "host_ai_enabled": bool(host_ai_enabled),
             "allowed_formats": [str(item).lstrip(".").upper() for item in allowed_formats],
         }

@@ -22,7 +22,7 @@ const props = defineProps<{
 }>()
 
 const emit = defineEmits<{ action: [] }>()
-const sourceOrder: SubtitleSource[] = ['moviepilot', 'opensubtitles', 'assrt', 'shooter', 'thunder']
+const sourceOrder: SubtitleSource[] = ['moviepilot', 'opensubtitles', 'assrt', 'shooter', 'thunder', 'subhd']
 const items = ref<SourceStatusItem[]>([])
 const loading = ref(false)
 const refreshing = ref(false)
@@ -131,7 +131,7 @@ function detailValue(key: string, value: unknown): string {
         <VExpansionPanelTitle>
           <div class="source-summary">
             <div class="source-identity">
-              <VIcon :icon="item.source === 'moviepilot' ? 'mdi-server-network' : item.source === 'opensubtitles' ? 'mdi-closed-caption-outline' : item.source === 'assrt' ? 'mdi-subtitles-outline' : item.source === 'shooter' ? 'mdi-target' : 'mdi-flash-outline'" size="20" />
+              <VIcon :icon="item.source === 'moviepilot' ? 'mdi-server-network' : item.source === 'opensubtitles' ? 'mdi-closed-caption-outline' : item.source === 'assrt' ? 'mdi-subtitles-outline' : item.source === 'shooter' ? 'mdi-target' : item.source === 'thunder' ? 'mdi-flash-outline' : 'mdi-web'" size="20" />
               <div><strong>{{ sourceLabels[item.source] }}</strong><span>{{ item.enabled ? '已启用' : '未启用' }} · {{ item.configured ? '配置完整' : '配置不完整' }}</span></div>
             </div>
             <StateChip :state="sourceHealthStates[item.health]" />
@@ -154,7 +154,7 @@ function detailValue(key: string, value: unknown): string {
 
             <VDivider class="my-3" />
             <div class="source-observations">
-              <h3>{{ item.source === 'moviepilot' ? '站点聚合观测' : item.source === 'opensubtitles' ? '会话与额度' : item.source === 'assrt' ? '配额与限流' : '内容指纹与接口观测' }}</h3>
+              <h3>{{ item.source === 'moviepilot' ? '站点聚合观测' : item.source === 'opensubtitles' || item.source === 'subhd' ? '账号会话与请求' : item.source === 'assrt' ? '配额与限流' : '内容指纹与接口观测' }}</h3>
               <dl v-if="detailEntries(item).length">
                 <DetailRow v-for="[key, value] in detailEntries(item)" :key="key" :label="friendlyKey(key)">{{ detailValue(key, value) }}</DetailRow>
               </dl>
@@ -163,6 +163,7 @@ function detailValue(key: string, value: unknown): string {
               <p v-if="item.source === 'assrt'" class="source-note">字幕服务由 <a href="https://assrt.net" target="_blank" rel="noopener noreferrer">assrt.net</a> 提供。</p>
               <p v-if="item.source === 'shooter'" class="source-note">字幕服务由 shooter.cn 提供；射手必须读取真实视频的四段内容指纹，接口无结果时不会推断为服务异常。</p>
               <p v-if="item.source === 'thunder'" class="source-note">字幕服务由迅雷影音公开接口提供；STRM 直接按文件名查询，真实视频 CID 相同的候选会标记为内容精确匹配。</p>
+              <p v-if="item.source === 'subhd'" class="source-note">字幕服务由 <a href="https://subhd.tv" target="_blank" rel="noopener noreferrer">SubHD</a> 提供；STRM 仅按文件名搜索，不读取内部媒体地址。</p>
             </div>
           </div>
         </VExpansionPanelText>

@@ -36,6 +36,7 @@ from .sources.fingerprint import MediaFingerprintService
 from .sources.moviepilot import MoviePilotSource
 from .sources.opensubtitles import OpenSubtitlesSource
 from .sources.shooter import ShooterSource
+from .sources.subhd import SubHDSource
 from .sources.thunder import ThunderSource
 
 _PLUGIN_INSTANCES: weakref.WeakValueDictionary[str, SubtitleDownloadAssistant] = weakref.WeakValueDictionary()
@@ -60,7 +61,7 @@ class SubtitleDownloadAssistant(_PluginBase):
     plugin_name = "字幕下载助手"
     plugin_desc = "自动刮削媒体库影片字幕，支持常见视频格式及 STRM 格式。"
     plugin_icon = "https://raw.githubusercontent.com/KiritoJia/SubtitleDownloadAssistant/main/icons/SubtitleDownloadAssistant.png"
-    plugin_version = "1.1.8"
+    plugin_version = "1.1.9"
     plugin_author = "Kirito"
     plugin_label = "字幕"
     plugin_config_prefix = "subtitledownloadassistant_"
@@ -124,6 +125,7 @@ class SubtitleDownloadAssistant(_PluginBase):
         )
         opensubtitles_credentials = store.get_credentials_sync(SubtitleSource.OPENSUBTITLES)
         assrt_credentials = store.get_credentials_sync(SubtitleSource.ASSRT)
+        subhd_credentials = store.get_credentials_sync(SubtitleSource.SUBHD)
         allowed_formats = set(settings.RMT_SUBEXT)
         fingerprints = MediaFingerprintService()
         source_gate = SourceConcurrencyGate(
@@ -157,6 +159,12 @@ class SubtitleDownloadAssistant(_PluginBase):
                 enabled=self.config.thunder_enabled,
                 allowed_formats=allowed_formats,
                 fingerprints=fingerprints,
+            ),
+            SubtitleSource.SUBHD: SubHDSource(
+                enabled=self.config.subhd_enabled,
+                credentials=subhd_credentials,
+                allowed_formats=allowed_formats,
+                base_url=self.config.subhd_base_url,
             ),
         }
         # AI 接管适配器只持有当前配置读取器，不保存任务结果；每个批次由适配器
@@ -281,11 +289,13 @@ class SubtitleDownloadAssistant(_PluginBase):
             self.store and self.store.credentials_configured_sync(SubtitleSource.OPENSUBTITLES)
         )
         assrt_configured = bool(self.store and self.store.credentials_configured_sync(SubtitleSource.ASSRT))
+        subhd_configured = bool(self.store and self.store.credentials_configured_sync(SubtitleSource.SUBHD))
         return [], self.config.public_payload(
             plugin_id=self.__class__.__name__,
             allowed_formats=settings.RMT_SUBEXT,
             opensubtitles_configured=opensubtitles_configured,
             assrt_configured=assrt_configured,
+            subhd_configured=subhd_configured,
             host_ai_enabled=bool(getattr(settings, "AI_AGENT_ENABLE", False)),
         )
 
@@ -520,7 +530,7 @@ class SubtitleDownloadAssistant(_PluginBase):
         if self.coordinator and source in self.coordinator.sources:
             adapter = self.coordinator.sources[source]
             adapter.enabled = enabled
-            if isinstance(adapter, (OpenSubtitlesSource, AssrtSource)):
+            if isinstance(adapter, (OpenSubtitlesSource, AssrtSource, SubHDSource)):
                 await adapter.replace_credentials(credentials)
         await self.store.save_source_status(
             SourceStatus(
@@ -542,10 +552,12 @@ class SubtitleDownloadAssistant(_PluginBase):
             self.config.opensubtitles_enabled = False
         elif source is SubtitleSource.ASSRT:
             self.config.assrt_enabled = False
+        elif source is SubtitleSource.SUBHD:
+            self.config.subhd_enabled = False
         if self.coordinator and source in self.coordinator.sources:
             adapter = self.coordinator.sources[source]
             adapter.enabled = False
-            if isinstance(adapter, (OpenSubtitlesSource, AssrtSource)):
+            if isinstance(adapter, (OpenSubtitlesSource, AssrtSource, SubHDSource)):
                 await adapter.replace_credentials({})
         await self.store.save_source_status(
             SourceStatus(

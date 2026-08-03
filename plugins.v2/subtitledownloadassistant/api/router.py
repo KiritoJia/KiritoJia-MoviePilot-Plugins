@@ -65,7 +65,7 @@ from .schemas import (
     TaskPage,
 )
 
-CredentialSource = Literal["opensubtitles", "assrt"]
+CredentialSource = Literal["opensubtitles", "assrt", "subhd"]
 
 
 class ApiController:
@@ -676,7 +676,7 @@ class ApiController:
                 kind, label, editable = "title", "英文标题", True
             elif source is SubtitleSource.SHOOTER:
                 kind, label, editable = "fingerprint", "视频内容指纹", True
-            elif source is SubtitleSource.THUNDER:
+            elif source in {SubtitleSource.THUNDER, SubtitleSource.SUBHD}:
                 kind, label, editable = "filename", "媒体文件名", True
             elif index == 0:
                 kind, label, editable = "title", "中文标题", True
@@ -702,6 +702,7 @@ class ApiController:
             SubtitleSource.ASSRT: {"videoname", "native_name"},
             SubtitleSource.SHOOTER: {"native_name", "content_hash_match"},
             SubtitleSource.THUNDER: {"native_name", "content_hash_match"},
+            SubtitleSource.SUBHD: {"release", "description"},
         }[candidate.source]
         details = {key: value for key, value in candidate.metadata.items() if key in allowed}
         if candidate.source is SubtitleSource.MOVIEPILOT:
@@ -767,6 +768,7 @@ class ApiController:
                     SubtitleSource.ASSRT: payload.assrt_keyword,
                     SubtitleSource.SHOOTER: payload.shooter_keyword,
                     SubtitleSource.THUNDER: payload.thunder_keyword,
+                    SubtitleSource.SUBHD: payload.subhd_keyword,
                 },
             )
         except LookupError as exc:
@@ -991,6 +993,7 @@ class ApiController:
         allowed_fields = {
             "opensubtitles": {"api_key", "username", "password"},
             "assrt": {"token"},
+            "subhd": {"email", "password"},
         }[source]
         if set(values) - allowed_fields:
             raise HTTPException(status_code=422, detail="请求包含不属于该字幕源的凭据字段")

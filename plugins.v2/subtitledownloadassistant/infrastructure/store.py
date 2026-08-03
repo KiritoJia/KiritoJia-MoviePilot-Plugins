@@ -569,6 +569,7 @@ class PluginStore:
         required = {
             SubtitleSource.OPENSUBTITLES: ("api_key", "username", "password"),
             SubtitleSource.ASSRT: ("token",),
+            SubtitleSource.SUBHD: ("email", "password"),
         }.get(source, ())
         return bool(required) and all(values.get(key, "").strip() for key in required)
 

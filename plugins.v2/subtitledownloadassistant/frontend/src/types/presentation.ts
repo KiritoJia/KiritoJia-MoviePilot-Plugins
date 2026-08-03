@@ -70,6 +70,7 @@ export const sourceLabels: Record<SubtitleSource, string> = {
   assrt: 'ASSRT',
   shooter: '射手网',
   thunder: '迅雷影音',
+  subhd: 'SubHD',
 }
 
 export const packageLabels: Record<PackageScope, string> = {
@@ -256,6 +257,8 @@ export function friendlyKey(key: string): string {
     limited_until: '受限结束',
     last_request_at: '最近请求',
     attribution: '服务来源',
+    base_url: '服务地址',
+    detail_page_count: '详情页请求数',
     fingerprint_input: '指纹输入',
     fingerprint_transport: '媒体读取方式',
     fingerprint_available: '内容指纹可用',

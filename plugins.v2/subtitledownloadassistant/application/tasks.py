@@ -78,6 +78,7 @@ SOURCE_NAMES = {
     SubtitleSource.ASSRT: "ASSRT",
     SubtitleSource.SHOOTER: "射手网",
     SubtitleSource.THUNDER: "迅雷影音",
+    SubtitleSource.SUBHD: "SubHD",
 }
 
 TRIGGER_NAMES = {
@@ -130,6 +131,7 @@ QUERY_TYPE_NAMES = {
     "english_title": "英文标题",
     "custom": "自定义关键词",
     "keyword": "英文标题关键词",
+    "filename": "文件名",
 }
 
 ATTEMPT_RESULT_NAMES = {

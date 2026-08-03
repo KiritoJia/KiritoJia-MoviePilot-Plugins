@@ -52,7 +52,7 @@ class OpenSubtitlesSource:
 
     source = SubtitleSource.OPENSUBTITLES
     BASE_URL = "https://api.opensubtitles.com/api/v1"
-    USER_AGENT = "MoviePilot SubtitleDownloadAssistant/1.1.8"
+    USER_AGENT = "MoviePilot SubtitleDownloadAssistant/1.1.9"
 
     def __init__(
         self,
