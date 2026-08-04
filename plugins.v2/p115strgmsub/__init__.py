@@ -39,7 +39,7 @@ class P115StrgmSub(_PluginBase):
     # 插件图标
     plugin_icon = "https://raw.githubusercontent.com/KiritoJia/SubtitleDownloadAssistant/main/icons/P115StrgmSub.png"
     # 插件版本
-    plugin_version = "1.5.5"
+    plugin_version = "1.5.6"
     # 插件作者
     plugin_author = "mrtian2016 / KiritoJia"
     # 作者主页
@@ -898,8 +898,23 @@ class P115StrgmSub(_PluginBase):
         return UIConfig.get_form()
 
     def get_page(self) -> Optional[List[dict]]:
-        history = self.get_data('history') or []
-        return UIConfig.get_page(history)
+        """返回插件详情页；历史数据异常时使用可渲染的备用页面。"""
+        try:
+            history = self.get_data('history') or []
+            page = UIConfig.get_page(history)
+            if page:
+                return page
+        except Exception as e:
+            logger.warning(f"生成 115 网盘订阅追更详情页失败，使用备用页面：{e}")
+
+        return [{
+            "component": "VAlert",
+            "props": {
+                "type": "info",
+                "variant": "tonal",
+                "text": "115 网盘订阅追更已加载。请在配置页检查 Cookie、搜索源和订阅设置。"
+            }
+        }]
 
     def get_api(self) -> List[Dict[str, Any]]:
         return [

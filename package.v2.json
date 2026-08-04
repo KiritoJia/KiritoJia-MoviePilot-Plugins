@@ -28,13 +28,14 @@
     "name": "115网盘订阅追更（依赖修复版）",
     "description": "结合 MoviePilot 订阅功能，自动搜索 115 网盘资源并转存缺失剧集。",
     "labels": "订阅,115网盘",
-    "version": "1.5.5",
+    "version": "1.5.6",
     "icon": "https://raw.githubusercontent.com/KiritoJia/SubtitleDownloadAssistant/main/icons/P115StrgmSub.png",
     "author": "mrtian2016 / KiritoJia",
     "level": 1,
     "release": true,
     "v2": true,
     "history": {
+      "v1.5.6": "修复 P115StrgmSub 详情页在历史数据异常时显示没有详情页面的问题",
       "v1.5.5": "兼容新版 MoviePilot 的 tmdb:ID 媒体键，修复缺失剧集被误判为空",
       "v1.5.4": "修复 p115client 旧版本已下架导致的安装失败，并切换到兼容的当前依赖链",
       "v1.5.3": "同步原版插件功能"
