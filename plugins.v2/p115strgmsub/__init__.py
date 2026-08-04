@@ -39,7 +39,7 @@ class P115StrgmSub(_PluginBase):
     # 插件图标
     plugin_icon = "https://raw.githubusercontent.com/KiritoJia/SubtitleDownloadAssistant/main/icons/P115StrgmSub.png"
     # 插件版本
-    plugin_version = "1.5.6"
+    plugin_version = "1.5.7"
     # 插件作者
     plugin_author = "mrtian2016 / KiritoJia"
     # 作者主页
@@ -527,10 +527,16 @@ class P115StrgmSub(_PluginBase):
 
     # ------------------ init_plugin ------------------
 
+    def _prepare_hdhive_extension(self):
+        """仅为 HDHive Playwright 模式准备可选的本地扩展模块。"""
+        if not self._hdhive_enabled or self._hdhive_query_mode != "playwright":
+            return
+
+        download_so_file(Path(__file__).parent / "lib")
+
     def init_plugin(self, config: dict = None):
         self.stop_service()
         self._ensure_toggle_scheduler()
-        download_so_file(Path(__file__).parent / "lib")
 
         if config:
             self._enabled = config.get("enabled", False)
@@ -612,6 +618,9 @@ class P115StrgmSub(_PluginBase):
             )
 
             self._block_system_subscribe = bool(config.get("block_system_subscribe", False))
+
+        # API 模式不依赖 hdhive 二进制；未启用 HDHive 时也不应访问 GitHub。
+        self._prepare_hdhive_extension()
 
         # 初始化客户端/handlers
         self._init_clients()
