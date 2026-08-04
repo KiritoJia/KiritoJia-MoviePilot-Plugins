@@ -16,9 +16,40 @@ from app.schemas import MediaInfo
 from app.schemas.types import MediaType, NotificationType
 from app.utils.string import StringUtils
 
+try:
+    from app.utils.media import build_media_key, resolve_media_identity
+except ImportError:
+    # Older MoviePilot versions do not expose the prefixed media-key helpers.
+    build_media_key = None
+    resolve_media_identity = None
+
 from ..utils import FileMatcher, SubscribeFilter
 from .search import SearchHandler
 from .subscribe import SubscribeHandler
+
+
+def _media_key_candidates(mediainfo: MediaInfo) -> List[Any]:
+    """Return current and legacy keys used by MoviePilot's missing-media map."""
+    keys: List[Any] = []
+
+    if build_media_key and resolve_media_identity:
+        source, media_id = resolve_media_identity(media=mediainfo)
+        if source and media_id:
+            keys.append(build_media_key(source, media_id))
+
+    for field in ("mediaid", "media_id", "tmdb_id", "douban_id", "bangumi_id", "anilist_id"):
+        value = getattr(mediainfo, field, None)
+        if value not in (None, ""):
+            keys.append(value)
+
+    candidates: List[Any] = []
+    seen = set()
+    for key in keys:
+        for candidate in (key, str(key)):
+            if candidate not in seen:
+                seen.add(candidate)
+                candidates.append(candidate)
+    return candidates
 
 
 class SyncHandler:
@@ -393,16 +424,28 @@ class SyncHandler:
             # 获取缺失的集数列表
             season = meta.begin_season or 1
             missing_episodes = []
-            mediakey = mediainfo.tmdb_id or mediainfo.douban_id
-
-            if no_exists and mediakey:
-                season_info = no_exists.get(mediakey, {})
+            if no_exists:
+                season_info = {}
+                for candidate_key in _media_key_candidates(mediainfo):
+                    if candidate_key in no_exists:
+                        season_info = no_exists[candidate_key]
+                        break
                 not_exist_info = season_info.get(season)
                 if not_exist_info:
                     missing_episodes = not_exist_info.episodes or []
                     if not missing_episodes and not_exist_info.total_episode:
                         start_ep = not_exist_info.start_episode or 1
                         missing_episodes = list(range(start_ep, not_exist_info.total_episode + 1))
+
+            if not missing_episodes and subscribe.total_episode:
+                # A newer MoviePilot may return a prefixed key while an older
+                # plugin integration only exposes the legacy numeric key.
+                start_ep = subscribe.start_episode or 1
+                missing_episodes = list(range(start_ep, subscribe.total_episode + 1))
+                logger.warning(
+                    f"{mediainfo.title_year} S{season} 未匹配到媒体缺失集映射，"
+                    f"按订阅总集数 {subscribe.total_episode} 兜底处理"
+                )
 
             if not missing_episodes:
                 logger.info(f"{mediainfo.title_year} S{season} 没有缺失剧集信息")
