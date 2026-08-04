@@ -1,6 +1,6 @@
-# 字幕下载助手
+# MoviePilot 插件仓
 
-MoviePilot V2 字幕自动刮削插件。
+收录“字幕下载助手”和“115网盘订阅追更（依赖修复版）”两个 MoviePilot V2 插件。
 
 > 自动刮削媒体库影片字幕，支持常见视频格式及 STRM 格式。
 
@@ -18,6 +18,7 @@ MoviePilot V2 字幕自动刮削插件。
 
 ```text
 plugins.v2/subtitledownloadassistant/  MoviePilot 插件
+plugins.v2/p115strgmsub/               115 网盘订阅追更插件
 icons/                                插件图标
 package.json                          插件仓库元数据
 ```
@@ -30,7 +31,7 @@ package.json                          插件仓库元数据
 https://github.com/KiritoJia/SubtitleDownloadAssistant
 ```
 
-添加后可在插件市场安装“字幕下载助手”。仓库根目录的 `package.json` 会提供版本信息；在线安装和更新使用 MoviePilot 规范的 Release ZIP，避免逐文件下载。
+添加后可在插件市场安装“字幕下载助手”或“115网盘订阅追更（依赖修复版）”。仓库根目录的 `package.json` 会提供版本信息；在线安装和更新使用 MoviePilot 规范的 Release ZIP，避免逐文件下载。
 
 [GitHub Releases](https://github.com/KiritoJia/SubtitleDownloadAssistant/releases) 同时提供可本地上传的 ZIP。手工安装时，把插件目录复制到：
 
@@ -45,6 +46,8 @@ https://github.com/KiritoJia/SubtitleDownloadAssistant
 ```
 
 详细配置和运行要求见[插件说明](plugins.v2/subtitledownloadassistant/README.md)。
+
+“115网盘订阅追更（依赖修复版）”基于 `mrtian2016/MoviePilot-Plugins` 的 `P115StrgmSub 1.5.3`，保留原插件 ID 和配置空间，仅修复已下架的 `p115client` 依赖。它使用 `p115client 0.0.9.6.5.1`，不再需要手工修改容器内的 `requirements.txt`。
 
 ## 项目关系
 
