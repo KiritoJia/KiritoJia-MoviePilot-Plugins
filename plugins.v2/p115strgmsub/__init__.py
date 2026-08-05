@@ -37,13 +37,13 @@ class P115StrgmSub(_PluginBase):
     # 插件描述
     plugin_desc = "结合MoviePilot订阅功能，自动搜索115网盘资源并转存缺失的电影和剧集。"
     # 插件图标
-    plugin_icon = "https://raw.githubusercontent.com/KiritoJia/SubtitleDownloadAssistant/main/icons/P115StrgmSub.png"
+    plugin_icon = "https://raw.githubusercontent.com/KiritoJia/KiritoJia-MoviePilot-Plugins/main/icons/P115StrgmSub.png"
     # 插件版本
     plugin_version = "1.5.7"
     # 插件作者
     plugin_author = "mrtian2016 / KiritoJia"
     # 作者主页
-    author_url = "https://github.com/KiritoJia/SubtitleDownloadAssistant"
+    author_url = "https://github.com/KiritoJia/KiritoJia-MoviePilot-Plugins"
     # 插件配置项ID前缀
     plugin_config_prefix = "p115strgmsub_"
     plugin_order = 20

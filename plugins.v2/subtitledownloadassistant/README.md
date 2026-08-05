@@ -17,10 +17,10 @@
 推荐在 MoviePilot 插件市场设置中添加在线仓库：
 
 ```text
-https://github.com/KiritoJia/SubtitleDownloadAssistant
+https://github.com/KiritoJia/KiritoJia-MoviePilot-Plugins
 ```
 
-添加后可在插件市场安装和更新“字幕下载助手”。也可以从 [GitHub Releases](https://github.com/KiritoJia/SubtitleDownloadAssistant/releases) 下载 ZIP 本地安装，或把 `subtitledownloadassistant` 目录放入：
+添加后可在插件市场安装和更新“字幕下载助手”。也可以从 [GitHub Releases](https://github.com/KiritoJia/KiritoJia-MoviePilot-Plugins/releases) 下载 ZIP 本地安装，或把 `subtitledownloadassistant` 目录放入：
 
 ```text
 /app/app/plugins/subtitledownloadassistant

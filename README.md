@@ -28,12 +28,12 @@ package.json                          插件仓库元数据
 在 MoviePilot 的插件市场设置中添加第三方插件仓库：
 
 ```text
-https://github.com/KiritoJia/SubtitleDownloadAssistant
+https://github.com/KiritoJia/KiritoJia-MoviePilot-Plugins
 ```
 
 添加后可在插件市场安装“字幕下载助手”或“115网盘订阅追更（依赖修复版）”。仓库根目录的 `package.json` 会提供版本信息；在线安装和更新使用 MoviePilot 规范的 Release ZIP，避免逐文件下载。
 
-[GitHub Releases](https://github.com/KiritoJia/SubtitleDownloadAssistant/releases) 同时提供可本地上传的 ZIP。手工安装时，把插件目录复制到：
+[GitHub Releases](https://github.com/KiritoJia/KiritoJia-MoviePilot-Plugins/releases) 同时提供可本地上传的 ZIP。手工安装时，把插件目录复制到：
 
 ```text
 /app/app/plugins/subtitledownloadassistant
