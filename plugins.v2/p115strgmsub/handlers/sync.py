@@ -3,6 +3,7 @@
 负责核心的同步逻辑：处理电影订阅、处理电视剧订阅
 """
 import datetime
+import inspect
 from typing import List, Dict, Any, Set, Optional, Callable
 
 from app.core.config import global_vars
@@ -17,6 +18,11 @@ from app.schemas.types import MediaType, NotificationType
 from app.utils.string import StringUtils
 
 try:
+    from app.db.models.downloadhistory import DownloadHistory as DownloadHistoryModel
+except ImportError:
+    DownloadHistoryModel = None
+
+try:
     from app.utils.media import build_media_key, resolve_media_identity
 except ImportError:
     # Older MoviePilot versions do not expose the prefixed media-key helpers.
@@ -28,24 +34,25 @@ from .search import SearchHandler
 from .subscribe import SubscribeHandler
 
 
+def _first_attr_value(obj, *names: str) -> Any:
+    for name in names:
+        value = getattr(obj, name, None)
+        if value not in (None, ""):
+            return value
+    return None
+
+
 def _subscribe_media_ids(subscribe) -> tuple[Any, Any]:
     """Read media IDs from both MoviePilot V2 and V3 subscription objects."""
 
-    def _first_value(*names: str) -> Any:
-        for name in names:
-            value = getattr(subscribe, name, None)
-            if value not in (None, ""):
-                return value
-        return None
-
     # V2 fields are kept first so existing subscriptions retain their behavior.
-    tmdbid = _first_value("tmdbid", "tmdb_id")
-    doubanid = _first_value("doubanid", "douban_id")
+    tmdbid = _first_attr_value(subscribe, "tmdbid", "tmdb_id")
+    doubanid = _first_attr_value(subscribe, "doubanid", "douban_id")
 
     # V3 stores the identity as media_source + media_id.
     if not tmdbid and not doubanid:
-        source = _first_value("media_source", "source")
-        media_id = _first_value("media_id", "mediaid")
+        source = _first_attr_value(subscribe, "media_source", "source")
+        media_id = _first_attr_value(subscribe, "media_id", "mediaid")
         source = getattr(source, "value", source)
         source = str(source).strip().lower() if source is not None else ""
 
@@ -56,6 +63,63 @@ def _subscribe_media_ids(subscribe) -> tuple[Any, Any]:
                 doubanid = media_id
 
     return tmdbid, doubanid
+
+
+def _subscribe_media_identity(subscribe) -> tuple[Any, Any]:
+    """Return MoviePilot V3's source-native media identity when available."""
+    source = _first_attr_value(subscribe, "media_source", "source")
+    media_id = _first_attr_value(subscribe, "media_id", "mediaid")
+    if source not in (None, "") and media_id not in (None, ""):
+        return source, str(media_id)
+
+    tmdbid, doubanid = _subscribe_media_ids(subscribe)
+    if tmdbid not in (None, ""):
+        return "tmdb", str(tmdbid)
+    if doubanid not in (None, ""):
+        return "douban", str(doubanid)
+    return None, None
+
+
+def _recognize_subscribe_media(chain, subscribe, meta, mtype, cache: bool = True):
+    """Call MoviePilot's V2 or V3 media-recognition API as appropriate."""
+    recognize = chain.recognize_media
+    kwargs = {
+        "meta": meta,
+        "mtype": mtype,
+        "cache": cache,
+    }
+
+    try:
+        parameters = inspect.signature(recognize).parameters
+    except (TypeError, ValueError):
+        parameters = {}
+
+    if "media_source" in parameters or "media_id" in parameters:
+        media_source, media_id = _subscribe_media_identity(subscribe)
+        if media_source and media_id:
+            kwargs.update(media_source=media_source, media_id=media_id)
+    else:
+        tmdbid, doubanid = _subscribe_media_ids(subscribe)
+        kwargs.update(tmdbid=tmdbid, doubanid=doubanid)
+
+    return recognize(**kwargs)
+
+
+def _download_history_identity_kwargs(mediainfo: MediaInfo) -> Dict[str, Any]:
+    """Build identity fields accepted by MoviePilot V2 or V3 history models."""
+    if DownloadHistoryModel is not None and hasattr(DownloadHistoryModel, "media_source"):
+        media_id = getattr(mediainfo, "media_id", None)
+        return {
+            "media_source": getattr(mediainfo, "media_source", None),
+            "media_id": str(media_id) if media_id not in (None, "") else None,
+        }
+
+    return {
+        "tmdbid": getattr(mediainfo, "tmdb_id", None),
+        "imdbid": getattr(mediainfo, "imdb_id", None),
+        "tvdbid": getattr(mediainfo, "tvdb_id", None),
+        "doubanid": getattr(mediainfo, "douban_id", None),
+    }
 
 
 def _media_key_candidates(mediainfo: MediaInfo) -> List[Any]:
@@ -186,12 +250,12 @@ class SyncHandler:
             meta.type = MediaType.MOVIE
 
             # 识别媒体信息
-            mediainfo: MediaInfo = self._chain.recognize_media(
+            mediainfo: MediaInfo = _recognize_subscribe_media(
+                chain=self._chain,
+                subscribe=subscribe,
                 meta=meta,
                 mtype=MediaType.MOVIE,
-                tmdbid=tmdbid,
-                doubanid=doubanid,
-                cache=True
+                cache=True,
             )
             if not mediainfo:
                 logger.warn(f"无法识别媒体信息：{subscribe.name}")
@@ -330,10 +394,6 @@ class SyncHandler:
                                     type=mediainfo.type.value,
                                     title=mediainfo.title,
                                     year=mediainfo.year,
-                                    tmdbid=mediainfo.tmdb_id,
-                                    imdbid=mediainfo.imdb_id,
-                                    tvdbid=mediainfo.tvdb_id,
-                                    doubanid=mediainfo.douban_id,
                                     image=mediainfo.get_poster_image(),
                                     downloader="115网盘",
                                     download_hash=matched_file.get("id"),
@@ -342,7 +402,8 @@ class SyncHandler:
                                     torrent_site="115网盘",
                                     username="P115StrgmSub",
                                     date=datetime.datetime.now().strftime("%Y-%m-%d %H:%M:%S"),
-                                    note={"source": f"Subscribe|{subscribe.name}", "share_url": share_url}
+                                    note={"source": f"Subscribe|{subscribe.name}", "share_url": share_url},
+                                    **_download_history_identity_kwargs(mediainfo),
                                 )
                                 logger.debug(f"已记录电影 {mediainfo.title} 下载历史")
                             except Exception as e:
@@ -409,12 +470,12 @@ class SyncHandler:
             meta.type = MediaType.TV
 
             # 识别媒体信息
-            mediainfo: MediaInfo = self._chain.recognize_media(
+            mediainfo: MediaInfo = _recognize_subscribe_media(
+                chain=self._chain,
+                subscribe=subscribe,
                 meta=meta,
                 mtype=MediaType.TV,
-                tmdbid=tmdbid,
-                doubanid=doubanid,
-                cache=True
+                cache=True,
             )
 
             if not mediainfo:
@@ -811,10 +872,6 @@ class SyncHandler:
                                     type=mediainfo.type.value,
                                     title=mediainfo.title,
                                     year=mediainfo.year,
-                                    tmdbid=mediainfo.tmdb_id,
-                                    imdbid=mediainfo.imdb_id,
-                                    tvdbid=mediainfo.tvdb_id,
-                                    doubanid=mediainfo.douban_id,
                                     seasons=f"S{season:02d}",
                                     episodes=episodes_str,
                                     image=mediainfo.get_poster_image(),
@@ -824,7 +881,8 @@ class SyncHandler:
                                     torrent_site="115网盘",
                                     username="P115StrgmSub",
                                     date=datetime.datetime.now().strftime("%Y-%m-%d %H:%M:%S"),
-                                    note={"source": f"Subscribe|{subscribe.name}", "share_url": share_url}
+                                    note={"source": f"Subscribe|{subscribe.name}", "share_url": share_url},
+                                    **_download_history_identity_kwargs(mediainfo),
                                 )
                                 logger.debug(f"已记录 {mediainfo.title} S{season:02d} {episodes_str} 下载历史")
                             except Exception as e:
