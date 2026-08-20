@@ -28,6 +28,36 @@ from .search import SearchHandler
 from .subscribe import SubscribeHandler
 
 
+def _subscribe_media_ids(subscribe) -> tuple[Any, Any]:
+    """Read media IDs from both MoviePilot V2 and V3 subscription objects."""
+
+    def _first_value(*names: str) -> Any:
+        for name in names:
+            value = getattr(subscribe, name, None)
+            if value not in (None, ""):
+                return value
+        return None
+
+    # V2 fields are kept first so existing subscriptions retain their behavior.
+    tmdbid = _first_value("tmdbid", "tmdb_id")
+    doubanid = _first_value("doubanid", "douban_id")
+
+    # V3 stores the identity as media_source + media_id.
+    if not tmdbid and not doubanid:
+        source = _first_value("media_source", "source")
+        media_id = _first_value("media_id", "mediaid")
+        source = getattr(source, "value", source)
+        source = str(source).strip().lower() if source is not None else ""
+
+        if media_id not in (None, ""):
+            if source in {"tmdb", "themoviedb"}:
+                tmdbid = media_id
+            elif source in {"douban", "豆瓣"}:
+                doubanid = media_id
+
+    return tmdbid, doubanid
+
+
 def _media_key_candidates(mediainfo: MediaInfo) -> List[Any]:
     """Return current and legacy keys used by MoviePilot's missing-media map."""
     keys: List[Any] = []
@@ -120,9 +150,10 @@ class SyncHandler:
         """
         try:
             logger.info(f"处理电影订阅：{subscribe.name} ({subscribe.year})")
+            tmdbid, doubanid = _subscribe_media_ids(subscribe)
 
             # 加载该订阅的历史积分花费（用 tmdb_id 作为唯一标识）
-            sub_key = f"tmdb_{subscribe.tmdbid}_movie" if subscribe.tmdbid else f"{subscribe.name}_movie"
+            sub_key = f"tmdb_{tmdbid}_movie" if tmdbid else f"{subscribe.name}_movie"
             if hasattr(self._search_handler, 'reset_sub_spent_points'):
                 self._search_handler.reset_sub_spent_points(sub_key)
 
@@ -158,8 +189,8 @@ class SyncHandler:
             mediainfo: MediaInfo = self._chain.recognize_media(
                 meta=meta,
                 mtype=MediaType.MOVIE,
-                tmdbid=subscribe.tmdbid,
-                doubanid=subscribe.doubanid,
+                tmdbid=tmdbid,
+                doubanid=doubanid,
                 cache=True
             )
             if not mediainfo:
@@ -359,9 +390,10 @@ class SyncHandler:
         try:
             logger.info(f"订阅信息：{subscribe.name}，开始集数：{subscribe.start_episode}, 总集数：{subscribe.total_episode}, 缺失集数：{subscribe.lack_episode}")
             logger.info(f"处理订阅：{subscribe.name} (S{subscribe.season or 1})")
+            tmdbid, doubanid = _subscribe_media_ids(subscribe)
 
             # 加载该订阅的历史积分花费（用 tmdb_id + 季数作为唯一标识）
-            sub_key = f"tmdb_{subscribe.tmdbid}_S{subscribe.season or 1}" if subscribe.tmdbid else f"{subscribe.name}_S{subscribe.season or 1}"
+            sub_key = f"tmdb_{tmdbid}_S{subscribe.season or 1}" if tmdbid else f"{subscribe.name}_S{subscribe.season or 1}"
             if hasattr(self._search_handler, 'reset_sub_spent_points'):
                 self._search_handler.reset_sub_spent_points(sub_key)
 
@@ -380,8 +412,8 @@ class SyncHandler:
             mediainfo: MediaInfo = self._chain.recognize_media(
                 meta=meta,
                 mtype=MediaType.TV,
-                tmdbid=subscribe.tmdbid,
-                doubanid=subscribe.doubanid,
+                tmdbid=tmdbid,
+                doubanid=doubanid,
                 cache=True
             )
 
