@@ -437,7 +437,7 @@ class UIConfig:
             "movie_save_path": "/我的接收/MoviePilot/Movie",
             "cookies": "",
             "pansou_enabled": True,
-            "pansou_url": "https://so.252035.xyz/",
+            "pansou_url": "https://ps.ugnas.xyz:998",
             "pansou_username": "",
             "pansou_password": "",
             "pansou_auth_enabled": False,
