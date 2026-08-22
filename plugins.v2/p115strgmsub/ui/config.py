@@ -245,7 +245,7 @@ class UIConfig:
                             {'component': 'VCol', 'props': {'cols': 6, 'md': 3},
                              'content': [{'component': 'VSwitch', 'props': {'model': 'pansou_enabled', 'label': '启用 PanSou'}}]},
                             {'component': 'VCol', 'props': {'cols': 12, 'md': 3},
-                             'content': [{'component': 'VTextField', 'props': {'model': 'pansou_url', 'label': 'PanSou API 地址', 'placeholder': 'https://your-pansou-api.com'}}]},
+                            'content': [{'component': 'VTextField', 'props': {'model': 'pansou_url', 'label': 'PanSou API 地址', 'placeholder': '请手动填写 PanSou 地址，留空不启用'}}]},
                             {'component': 'VCol', 'props': {'cols': 12, 'md': 6},
                              'content': [{'component': 'VTextField', 'props': {'model': 'pansou_channels', 'label': 'TG 搜索频道', 'placeholder': '频道,用逗号分隔'}}]}
                         ]
@@ -437,7 +437,7 @@ class UIConfig:
             "movie_save_path": "/我的接收/MoviePilot/Movie",
             "cookies": "",
             "pansou_enabled": True,
-            "pansou_url": "https://ps.ugnas.xyz:998",
+            "pansou_url": "",
             "pansou_username": "",
             "pansou_password": "",
             "pansou_auth_enabled": False,

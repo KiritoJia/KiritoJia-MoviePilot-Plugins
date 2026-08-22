@@ -32,8 +32,11 @@ lock = Lock()
 class P115StrgmSub(_PluginBase):
     """115网盘订阅追更插件"""
 
-    _DEFAULT_PANSOU_URL = "https://ps.ugnas.xyz:998"
-    _LEGACY_PANSOU_URL = "https://so.252035.xyz"
+    # PanSou 不再提供内置地址；旧版本自动写入的地址会在加载配置时清除。
+    _REMOVED_DEFAULT_PANSOU_URLS = frozenset({
+        "https://ps.ugnas.xyz:998",
+        "https://so.252035.xyz",
+    })
 
     # 插件名称
     plugin_name = "115网盘订阅追更"
@@ -42,7 +45,7 @@ class P115StrgmSub(_PluginBase):
     # 插件图标
     plugin_icon = "https://raw.githubusercontent.com/KiritoJia/KiritoJia-MoviePilot-Plugins/main/icons/P115StrgmSub.png"
     # 插件版本
-    plugin_version = "1.5.10"
+    plugin_version = "1.5.11"
     # 插件作者
     plugin_author = "mrtian2016 / KiritoJia"
     # 作者主页
@@ -64,7 +67,7 @@ class P115StrgmSub(_PluginBase):
 
     _cookies: str = ""
     _pansou_enabled: bool = True
-    _pansou_url: str = _DEFAULT_PANSOU_URL
+    _pansou_url: str = ""
     _pansou_username: str = ""
     _pansou_password: str = ""
     _pansou_auth_enabled: bool = False
@@ -552,10 +555,10 @@ class P115StrgmSub(_PluginBase):
             self._cookies = config.get("cookies", "")
 
             self._pansou_enabled = config.get("pansou_enabled", True)
-            pansou_url = (config.get("pansou_url", self._DEFAULT_PANSOU_URL) or self._DEFAULT_PANSOU_URL).strip()
-            if pansou_url.rstrip("/") == self._LEGACY_PANSOU_URL:
-                self._pansou_url = self._DEFAULT_PANSOU_URL
-                logger.info(f"PanSou 地址已从旧地址迁移到 {self._DEFAULT_PANSOU_URL}")
+            pansou_url = str(config.get("pansou_url") or "").strip()
+            if pansou_url.rstrip("/") in self._REMOVED_DEFAULT_PANSOU_URLS:
+                self._pansou_url = ""
+                logger.info("已清除旧版本内置的 PanSou 地址，请在配置中手动填写自定义地址")
             else:
                 self._pansou_url = pansou_url
             self._pansou_username = config.get("pansou_username", "")
