@@ -395,6 +395,51 @@ def test_transfer_event_only_enqueues_local_target() -> None:
         handler_globals["build_media_context"] = original_builder
 
 
+def test_transfer_event_skips_unresolvable_target() -> None:
+    plugin_class = _load_plugin_class()
+    original_path = "/115open/recent/Show.S01E05.mkv"
+    original_context = SimpleNamespace(
+        target_path=original_path,
+        target_storage="CloudDrive",
+    )
+    cloud_target = SimpleNamespace(path=original_path, storage="CloudDrive")
+
+    class Coordinator:
+        def __init__(self) -> None:
+            self.items: list[TaskWorkItem] = []
+
+        async def enqueue(self, item: TaskWorkItem) -> str:
+            self.items.append(item)
+            return f"task-{len(self.items)}"
+
+    class Targets:
+        async def resolve_runtime_target(self, _context, _target):
+            raise FileNotFoundError("本地挂载目录不存在")
+
+    coordinator = Coordinator()
+    plugin = object.__new__(plugin_class)
+    plugin.coordinator = coordinator
+    plugin.targets = Targets()
+    plugin.get_state = lambda: True
+    handler_globals = plugin_class.on_transfer_complete.__globals__
+    original_builder = handler_globals["build_media_context"]
+    handler_globals["build_media_context"] = lambda *_args: original_context
+    event = SimpleNamespace(
+        event_data={
+            "transferinfo": SimpleNamespace(target_item=cloud_target),
+            "transfer_history_id": "7380",
+            "mediainfo": object(),
+        }
+    )
+
+    try:
+        asyncio.run(plugin.on_transfer_complete(event))
+    finally:
+        handler_globals["build_media_context"] = original_builder
+
+    assert coordinator.items == []
+
+
 def test_store_upgrade_adds_scan_index_without_touching_existing_data() -> None:
     store_class = _load_store_class()
 

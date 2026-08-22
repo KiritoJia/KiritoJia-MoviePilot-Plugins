@@ -41,7 +41,7 @@ from .limiter import SlidingWindowLimiter
 SEARCH_CACHE_TTL_SECONDS = 30 * 60
 SEARCH_CACHE_REGION = "subtitledownloadassistant_source_subhd"
 DEFAULT_BASE_URL = "https://subhd.tv"
-_USER_AGENT = "MoviePilot SubtitleDownloadAssistant/1.1.9"
+_USER_AGENT = "MoviePilot SubtitleDownloadAssistant/1.1.10"
 _DETAIL_PATH = re.compile(r"^/a/([A-Za-z0-9_-]+)$")
 _MEDIA_PATH = re.compile(r"^/d/([A-Za-z0-9_-]+)$")
 _FORMAT_PATTERN = re.compile(r"\b(ASS|SSA|SRT|SUP|VTT|SUB)\b", re.IGNORECASE)

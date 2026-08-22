@@ -61,7 +61,7 @@ class SubtitleDownloadAssistant(_PluginBase):
     plugin_name = "字幕下载助手"
     plugin_desc = "自动刮削媒体库影片字幕，支持常见视频格式及 STRM 格式。"
     plugin_icon = "https://raw.githubusercontent.com/KiritoJia/KiritoJia-MoviePilot-Plugins/main/icons/SubtitleDownloadAssistant.png"
-    plugin_version = "1.1.9"
+    plugin_version = "1.1.10"
     plugin_author = "Kirito"
     plugin_label = "字幕"
     plugin_config_prefix = "subtitledownloadassistant_"
@@ -321,13 +321,25 @@ class SubtitleDownloadAssistant(_PluginBase):
             return
         original_target_path = context.target_path
         if self.targets is not None:
-            context, target = await self.targets.resolve_runtime_target(context, target)
+            try:
+                context, target = await self.targets.resolve_runtime_target(context, target)
+            except (OSError, ValueError, RuntimeError) as exc:
+                logger.warning(
+                    f"字幕下载助手无法将整理目标“{original_target_path}”定位到本地媒体，"
+                    f"跳过本次自动字幕任务：{exc}"
+                )
+                return
         if context.target_path != original_target_path:
             logger.info(
                 f"字幕下载助手已将整理目标“{original_target_path}”"
                 f"定位到本地文件“{context.target_path}”"
             )
-        if getattr(target, "storage", None) != "local":
+        target_storage = str(
+            getattr(target, "storage", None)
+            or getattr(context, "target_storage", None)
+            or ""
+        ).strip().lower()
+        if target_storage != "local":
             logger.info(
                 f"字幕下载助手整理目标“{original_target_path}”尚未定位到自定义本地目录，"
                 "不创建网盘字幕任务，等待目录监控发现本地文件"
