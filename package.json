@@ -24,6 +24,22 @@
       "v1.0.0": "独立正式版：目录增量监控、五类字幕源、STRM 指纹、任务工作台和终态任务一键清理"
     }
   },
+  "AutoSubtitle": {
+    "name": "自动字幕下载",
+    "description": "文件整理完成后自动搜索并下载缺失的字幕。",
+    "labels": "字幕",
+    "version": "1.2",
+    "icon": "https://raw.githubusercontent.com/KiritoJia/KiritoJia-MoviePilot-Plugins/main/icons/autosubtitles.jpeg",
+    "author": "yubanmeiqin9048 / KiritoJia",
+    "level": 2,
+    "release": true,
+    "v2": true,
+    "history": {
+      "v1.2": "修复远程储存整理事件被当作本地路径访问导致的字幕下载异常",
+      "v1.1": "添加自动调轴功能和内封字幕检测",
+      "v1.0": "初版"
+    }
+  },
   "P115StrgmSub": {
     "name": "115网盘订阅追更（依赖修复版）",
     "description": "结合 MoviePilot 订阅功能，自动搜索 115 网盘资源并转存缺失剧集。",
