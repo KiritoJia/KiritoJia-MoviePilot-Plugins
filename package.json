@@ -26,6 +26,21 @@
       "v1.0.0": "独立正式版：目录增量监控、五类字幕源、STRM 指纹、任务工作台和终态任务一键清理"
     }
   },
+  "P115StrmHelper": {
+    "name": "115网盘STRM助手（V3兼容版）",
+    "description": "115网盘STRM生成、分享转存、离线下载与媒体库同步工具，适配 MoviePilot V3 / Python 3.14。",
+    "labels": "115网盘,STRM,同步",
+    "version": "2.8.72",
+    "icon": "https://raw.githubusercontent.com/jxxghp/MoviePilot-Frontend/refs/heads/v2/src/assets/images/misc/u115.png",
+    "author": "DDSRem / KiritoJia",
+    "level": 1,
+    "release": true,
+    "v2": true,
+    "history": {
+      "v2.8.72": "新增 MoviePilot V3 标准 pyproject 元数据，并通过 Release 构建 Linux Python 3.14 (cp314) Rust 依赖包，修复旧 cp312 wheels 无法安装。",
+      "v2.8.71": "同步上游插件版本。"
+    }
+  },
   "P115StrgmSub": {
     "name": "115网盘订阅追更（依赖修复版）",
     "description": "结合 MoviePilot 订阅功能，自动搜索 115 网盘资源并转存缺失剧集。",

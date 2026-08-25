@@ -1,0 +1,46 @@
+name: Release P115StrmHelper
+
+on:
+  workflow_dispatch:
+  push:
+    paths:
+      - "plugins.v2/p115strmhelper/**"
+      - ".github/workflows/release-p115strmhelper.yml"
+
+permissions:
+  contents: write
+
+jobs:
+  release:
+    runs-on: ubuntu-latest
+    env:
+      PLUGIN_DIR: plugins.v2/p115strmhelper
+      VERSION: 2.8.72
+    steps:
+      - uses: actions/checkout@v5
+      - uses: actions/setup-python@v6
+        with:
+          python-version: "3.14"
+      - name: Install build tools
+        run: python -m pip install --upgrade pip maturin==1.10.2
+      - name: Build CPython 3.14 Linux wheels
+        run: |
+          mkdir -p "$PLUGIN_DIR/wheels"
+          for crate in full_strm_sync txt_tree_storage share_strm_scan; do
+            maturin build --release --interpreter python3.14 --out "$PLUGIN_DIR/wheels" --manifest-path "$PLUGIN_DIR/rust_utils/$crate/Cargo.toml"
+          done
+          python -m pip wheel --no-deps --wheel-dir "$PLUGIN_DIR/wheels" 'pyahocorasick~=2.3.0'
+      - name: Package plugin
+        run: |
+          mkdir -p release/p115strmhelper
+          cp -a "$PLUGIN_DIR/." release/p115strmhelper/
+          cd release
+          zip -qr "../p115strmhelper_v${VERSION}.zip" p115strmhelper
+      - name: Publish release
+        env:
+          GH_TOKEN: ${{ github.token }}
+        run: |
+          gh release create "P115StrmHelper_v${VERSION}" "p115strmhelper_v${VERSION}.zip" \
+            --title "P115StrmHelper v${VERSION}" \
+            --notes "MoviePilot V3 / Python 3.14 compatibility release with Linux cp314 wheels." \
+            --latest
