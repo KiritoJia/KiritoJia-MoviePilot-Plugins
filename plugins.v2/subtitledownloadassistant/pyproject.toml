@@ -1,3 +1,12 @@
+[project]
+name = "moviepilot-subtitle-download-assistant"
+version = "1.1.11"
+description = "MoviePilot subtitle download assistant plugin"
+requires-python = ">=3.11"
+dependencies = [
+    "yake",
+]
+
 [tool.ty.environment]
 python = "/home/zhang/Documents/MoviePilot/.venv"
 python-version = "3.11"
