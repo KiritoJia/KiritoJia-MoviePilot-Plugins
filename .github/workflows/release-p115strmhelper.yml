@@ -15,7 +15,7 @@ jobs:
     runs-on: ubuntu-latest
     env:
       PLUGIN_DIR: plugins.v2/p115strmhelper
-      VERSION: 2.8.72
+      VERSION: 2.8.73
     steps:
       - uses: actions/checkout@v5
       - uses: actions/setup-python@v6
@@ -33,7 +33,7 @@ jobs:
       - name: Package plugin
         run: |
           mkdir -p release/p115strmhelper
-          cp -a "$PLUGIN_DIR/." release/p115strmhelper/
+          rsync -a --exclude rust_utils "$PLUGIN_DIR/" release/p115strmhelper/
           cd release
           zip -qr "../p115strmhelper_v${VERSION}.zip" p115strmhelper
       - name: Publish release
