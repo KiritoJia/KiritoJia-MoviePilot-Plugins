@@ -1,0 +1,41 @@
+name: Release P115StrgmSub
+
+on:
+  workflow_dispatch:
+  push:
+    paths:
+      - "plugins.v2/p115strgmsub/**"
+      - "package.json"
+      - "package.v2.json"
+      - ".github/workflows/release-p115strgmsub.yml"
+
+permissions:
+  contents: write
+
+jobs:
+  release:
+    runs-on: ubuntu-latest
+    env:
+      VERSION: 1.5.12
+      PLUGIN_DIR: plugins.v2/p115strgmsub
+    steps:
+      - uses: actions/checkout@v5
+      - name: Validate plugin
+        run: |
+          test -f "$PLUGIN_DIR/__init__.py"
+          test -f "$PLUGIN_DIR/requirements.txt"
+          python3 -m compileall -q "$PLUGIN_DIR"
+      - name: Package plugin
+        run: |
+          mkdir -p release/p115strgmsub
+          cp -a "$PLUGIN_DIR/." release/p115strgmsub/
+          cd release
+          zip -qr "../p115strgmsub_v${VERSION}.zip" p115strgmsub
+      - name: Publish release
+        env:
+          GH_TOKEN: ${{ github.token }}
+        run: |
+          gh release create "P115StrgmSub_v${VERSION}" "p115strgmsub_v${VERSION}.zip" \
+            --title "P115StrgmSub v${VERSION}" \
+            --notes "修复 PanSou 自定义地址保存后被启动逻辑清空的问题。" \
+            --latest
