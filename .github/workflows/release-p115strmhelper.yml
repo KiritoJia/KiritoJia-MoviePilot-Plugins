@@ -15,7 +15,7 @@ jobs:
     runs-on: ubuntu-latest
     env:
       PLUGIN_DIR: plugins.v2/p115strmhelper
-      VERSION: 2.8.73
+      VERSION: 2.8.74
     steps:
       - uses: actions/checkout@v5
       - uses: actions/setup-python@v6

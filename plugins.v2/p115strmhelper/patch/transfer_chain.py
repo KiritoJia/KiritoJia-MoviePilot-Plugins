@@ -122,7 +122,17 @@ class TransferChainPatcher:
 
         from ..schemas.transfer import TransferTask as PluginTransferTask
 
+        delegated_to_native = False
         try:
+            # 只有 115 -> 115 才需要插件接管。其它存储必须尽早交给
+            # MoviePilot V3 原生链路，否则会落入已废弃的 legacy transfer ABI。
+            if (
+                not task.fileitem
+                or task.fileitem.storage != cls._storage_module
+            ):
+                delegated_to_native = True
+                return cls._call_original(chain_self, task, callback)
+
             ########## 原始方法执行部分 ##########
 
             transferhis = TransferHistoryOper()
@@ -433,6 +443,7 @@ class TransferChainPatcher:
                 return True, "已由插件接管"
 
             # 非 115 -> 115 原方法整理
+            delegated_to_native = True
             return cls._call_original_transfer_part(chain_self, task, callback)
 
         except Exception as e:
@@ -440,14 +451,16 @@ class TransferChainPatcher:
                 f"【整理接管】Patched handle_transfer 异常: {e}", exc_info=True
             )
             try:
+                delegated_to_native = True
                 return cls._call_original(chain_self, task, callback)
             except Exception as fallback_error:
                 logger.error(f"【整理接管】回退到原方法也失败: {fallback_error}")
                 return False, f"整理异常: {e}"
         finally:
             # 与原生 __handle_transfer 一致：每次处理完尝试移除已完成作业，并清理批次 pending 集合
-            chain_self.jobview.try_remove_job(task)
-            chain_self._TransferChain__finish_scrape_batch_task(task)
+            if not delegated_to_native:
+                chain_self.jobview.try_remove_job(task)
+                chain_self._TransferChain__finish_scrape_batch_task(task)
 
     @classmethod
     def _derive_transfer_flags(cls, task) -> Tuple[bool, bool, bool]:
@@ -707,74 +720,19 @@ class TransferChainPatcher:
         cls, chain_self, task, callback: Optional[Callable]
     ) -> Optional[Tuple[bool, str]]:
         """
-        调用原方法的 transfer 部分
+        将未被插件接管的任务交给 MoviePilot 原生整理链。
+
+        MoviePilot V3 的旧式 ``TransferChain.transfer`` 只允许已持久化
+        整理计划的内部调用。插件不能再手工拼接旧参数调用它，否则会触发
+        “整理终态缺少持久执行检查点”或“不同输入准入”错误。
 
         :param chain_self: TransferChain 实例
         :param task: 任务
         :param callback: 回调
         :return: 返回值
         """
-        from app.core.event import eventmanager
-        from app.schemas import StorageOperSelectionEventData, TransferInfo
-        from app.schemas.types import ChainEventType
-
-        try:
-            # 正在处理
-            chain_self.jobview.running_task(task)
-
-            # 获取源存储操作对象
-            source_oper = None
-            source_event_data = StorageOperSelectionEventData(
-                storage=task.fileitem.storage
-            )
-            source_event = eventmanager.send_event(
-                ChainEventType.StorageOperSelection, source_event_data
-            )
-            if source_event and source_event.event_data:
-                source_event_data = source_event.event_data
-                if source_event_data.storage_oper:
-                    source_oper = source_event_data.storage_oper
-
-            # 获取目标存储操作对象
-            target_oper = None
-            target_event_data = StorageOperSelectionEventData(
-                storage=task.target_storage
-            )
-            target_event = eventmanager.send_event(
-                ChainEventType.StorageOperSelection, target_event_data
-            )
-            if target_event and target_event.event_data:
-                target_event_data = target_event.event_data
-                if target_event_data.storage_oper:
-                    target_oper = target_event_data.storage_oper
-
-            # 执行整理
-            transferinfo: TransferInfo = chain_self.transfer(
-                fileitem=task.fileitem,
-                meta=task.meta,
-                mediainfo=task.mediainfo,
-                target_directory=task.target_directory,
-                target_storage=task.target_storage,
-                target_path=task.target_path,
-                transfer_type=task.transfer_type,
-                episodes_info=task.episodes_info,
-                scrape=task.scrape,
-                library_type_folder=task.library_type_folder,
-                library_category_folder=task.library_category_folder,
-                source_oper=source_oper,
-                target_oper=target_oper,
-                preview=task.preview,
-            )
-
-            if not transferinfo:
-                logger.error("文件整理模块运行失败")
-                return False, "文件整理模块运行失败"
-
-            if callback:
-                return callback(task, transferinfo)
-
-            return transferinfo.success, transferinfo.message
-
-        except Exception as e:
-            logger.error(f"【整理接管】执行 transfer 失败: {e}", exc_info=True)
-            return False, f"整理失败: {e}"
+        logger.debug(
+            f"【整理接管】任务不符合 115 → 115 接管条件，交给 MoviePilot 原生整理链: "
+            f"{getattr(task.fileitem, 'storage', None)} -> {task.target_storage}"
+        )
+        return cls._call_original(chain_self, task, callback)
