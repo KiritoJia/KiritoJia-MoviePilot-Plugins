@@ -1,6 +1,6 @@
 [project]
 name = "moviepilot-p115strmhelper"
-version = "2.8.75"
+version = "2.8.76"
 description = "MoviePilot 115 STRM helper plugin"
 requires-python = ">=3.12"
 dependencies = [
@@ -16,6 +16,7 @@ dependencies = [
     "slippers-proxy~=0.3.0",
     "orjson",
     "numpy",
+    "jieba",
     "httpx[http2]",
     "full_strm_sync==0.1.6",
     "txt_tree_storage==0.2.1",

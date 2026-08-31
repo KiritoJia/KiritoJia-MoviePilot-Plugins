@@ -10,6 +10,7 @@ p115center-sdk==0.0.17
 slippers-proxy~=0.3.0
 orjson
 numpy
+jieba
 httpx[http2]
 
 # Rust Mode

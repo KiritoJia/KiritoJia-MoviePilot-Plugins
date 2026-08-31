@@ -15,7 +15,7 @@ jobs:
     runs-on: ubuntu-latest
     env:
       PLUGIN_DIR: plugins.v2/p115strmhelper
-      VERSION: 2.8.75
+      VERSION: 2.8.76
     steps:
       - uses: actions/checkout@v5
       - uses: actions/setup-python@v6
@@ -32,7 +32,10 @@ jobs:
             maturin build --release --interpreter python3.14 --out "$PLUGIN_DIR/wheels" --manifest-path "$PLUGIN_DIR/rust_utils/$crate/Cargo.toml"
           done
           python -m pip wheel --no-deps --wheel-dir "$PLUGIN_DIR/wheels" 'pyahocorasick~=2.3.0'
-          test -n "$(find "$PLUGIN_DIR/wheels" -maxdepth 1 -type f -name '*cp314*linux*' -print -quit)"
+          for wheel_package in full_strm_sync txt_tree_storage share_strm_scan; do
+            test -n "$(find "$PLUGIN_DIR/wheels" -maxdepth 1 -type f -name "${wheel_package}-*cp314*linux*" -print -quit)"
+          done
+          test -n "$(find "$PLUGIN_DIR/wheels" -maxdepth 1 -type f -name 'pyahocorasick-*cp314*linux*' -print -quit)"
           ! find "$PLUGIN_DIR/wheels" -maxdepth 1 -type f -name '*cp312*' -print -quit | grep -q .
       - name: Package plugin
         run: |
