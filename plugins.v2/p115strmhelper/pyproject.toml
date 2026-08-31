@@ -1,6 +1,6 @@
 [project]
 name = "moviepilot-p115strmhelper"
-version = "2.8.74"
+version = "2.8.75"
 description = "MoviePilot 115 STRM helper plugin"
 requires-python = ">=3.12"
 dependencies = [
