@@ -15,7 +15,7 @@ jobs:
     runs-on: ubuntu-latest
     env:
       PLUGIN_DIR: plugins.v2/p115strmhelper
-      VERSION: 2.8.76
+      VERSION: 2.8.77
     steps:
       - uses: actions/checkout@v5
       - uses: actions/setup-python@v6
@@ -25,8 +25,9 @@ jobs:
         run: python -m pip install --upgrade pip maturin==1.10.2
       - name: Build CPython 3.14 Linux wheels
         run: |
-          # Never ship stale cp312 artifacts from the source tree.
-          rm -rf "$PLUGIN_DIR/wheels"
+          # Keep the checked-in cp312 wheels for older MoviePilot images.
+          # Only remove stale cp314 builds before rebuilding the current runtime.
+          find "$PLUGIN_DIR/wheels" -maxdepth 1 -type f -name '*cp314*' -delete
           mkdir -p "$PLUGIN_DIR/wheels"
           for crate in full_strm_sync txt_tree_storage share_strm_scan; do
             maturin build --release --interpreter python3.14 --out "$PLUGIN_DIR/wheels" --manifest-path "$PLUGIN_DIR/rust_utils/$crate/Cargo.toml"
@@ -36,7 +37,13 @@ jobs:
             test -n "$(find "$PLUGIN_DIR/wheels" -maxdepth 1 -type f -name "${wheel_package}-*cp314*linux*" -print -quit)"
           done
           test -n "$(find "$PLUGIN_DIR/wheels" -maxdepth 1 -type f -name 'pyahocorasick-*cp314*linux*' -print -quit)"
-          ! find "$PLUGIN_DIR/wheels" -maxdepth 1 -type f -name '*cp312*' -print -quit | grep -q .
+          for wheel_package in full_strm_sync txt_tree_storage share_strm_scan; do
+            test -n "$(find "$PLUGIN_DIR/wheels" -maxdepth 1 -type f -name "${wheel_package}-*cp312*linux*x86_64*" -print -quit)"
+          done
+          test -n "$(find "$PLUGIN_DIR/wheels" -maxdepth 1 -type f -name 'pyahocorasick-*cp312*linux*x86_64*' -print -quit)"
+          # Keep only Linux wheels in the release bundle. The plugin runs in
+          # Linux containers; macOS/Windows wheels only add noise and size.
+          find "$PLUGIN_DIR/wheels" -maxdepth 1 -type f ! -name '*linux*' -delete
       - name: Package plugin
         run: |
           mkdir -p release/p115strmhelper
@@ -49,5 +56,5 @@ jobs:
         run: |
           gh release create "P115StrmHelper_v${VERSION}" "p115strmhelper_v${VERSION}.zip" \
             --title "P115StrmHelper v${VERSION}" \
-            --notes "修复 Python 3.14 运行环境加载失败；清理旧 cp312 wheel，仅发布 Linux cp314 依赖包。" \
+            --notes "兼容 MoviePilot Python 3.12 和 3.14；同时发布 Linux cp312/cp314 依赖包，修复其他 NAS 安装失败。" \
             --latest

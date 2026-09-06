@@ -1,3 +1,10 @@
+# Prefer wheels bundled in the plugin ZIP. MoviePilot's local installer runs
+# pip from outside the extracted plugin directory, so cover its upload path,
+# installed plugin path, and the relative path used by direct pip installs.
+--find-links /tmp/moviepilot/upload/p115strmhelper/wheels
+--find-links /app/app/plugins/p115strmhelper/wheels
+--find-links ./wheels
+
 p115client==0.0.9.6.5.1
 sentry-sdk~=2.68.0
 aligo~=6.2.8
