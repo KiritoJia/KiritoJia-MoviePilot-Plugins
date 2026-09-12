@@ -30,7 +30,7 @@
     "name": "Emby缺集自动订阅",
     "description": "扫描 Emby 媒体库，发现已播缺集后自动创建 MoviePilot 订阅。",
     "labels": "Emby,订阅,缺集",
-    "version": "1.0.0",
+    "version": "1.0.1",
     "icon": "https://raw.githubusercontent.com/KiritoJia/KiritoJia-MoviePilot-Plugins/main/icons/EmbyMissingSubscribe.svg",
     "author": "KiritoJia",
     "level": 1,
@@ -38,6 +38,7 @@
     "v2": true,
     "system_version": ">=3.0.0",
     "history": {
+      "v1.0.1": "重新设计 V3 配置页，增加运行概览、实时状态和立即扫描。",
       "v1.0.0": "首发版：扫描 Emby 电视剧缺集，按季创建 MoviePilot 订阅，支持定时与立即扫描。"
     }
   },

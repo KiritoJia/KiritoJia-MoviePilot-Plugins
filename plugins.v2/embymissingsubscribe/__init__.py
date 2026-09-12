@@ -26,7 +26,7 @@ class EmbyMissingSubscribe(_PluginBase):
     plugin_name = "Emby缺集自动订阅"
     plugin_desc = "扫描 Emby 媒体库，发现已播缺集后自动创建 MoviePilot 订阅"
     plugin_icon = "https://raw.githubusercontent.com/KiritoJia/KiritoJia-MoviePilot-Plugins/main/icons/EmbyMissingSubscribe.svg"
-    plugin_version = "1.0.0"
+    plugin_version = "1.0.1"
     plugin_author = "KiritoJia"
     author_url = "https://github.com/KiritoJia"
     plugin_config_prefix = "embymissingsubscribe_"
@@ -79,7 +79,15 @@ class EmbyMissingSubscribe(_PluginBase):
             "endpoint": self.scan_library,
             "methods": ["GET"],
             "summary": "立即扫描 Emby 缺集",
+        }, {
+            "path": "/summary",
+            "endpoint": self.get_summary,
+            "methods": ["GET"],
+            "summary": "获取 Emby 缺集扫描状态",
         }]
+
+    def get_summary(self) -> dict[str, Any]:
+        return self._last_summary or {"success": True, "message": "尚未执行扫描"}
 
     def get_page(self) -> list[dict[str, Any]]:
         if not self._last_summary:
