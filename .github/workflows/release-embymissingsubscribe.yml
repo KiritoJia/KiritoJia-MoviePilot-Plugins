@@ -36,7 +36,13 @@ jobs:
         env:
           GH_TOKEN: ${{ github.token }}
         run: |
-          gh release create "EmbyMissingSubscribe_v${VERSION}" "embymissingsubscribe_v${VERSION}.zip" \
-            --title "EmbyMissingSubscribe v${VERSION}" \
-            --notes "首发版：扫描 Emby 电视剧缺集，按季创建 MoviePilot 订阅，支持定时与立即扫描。" \
-            --latest
+          TAG="EmbyMissingSubscribe_v${VERSION}"
+          ASSET="embymissingsubscribe_v${VERSION}.zip"
+          if gh release view "$TAG" >/dev/null 2>&1; then
+            gh release upload "$TAG" "$ASSET" --clobber
+          else
+            gh release create "$TAG" "$ASSET" \
+              --title "EmbyMissingSubscribe v${VERSION}" \
+              --notes "首发版：扫描 Emby 电视剧缺集，按季创建 MoviePilot 订阅，支持定时与立即扫描。" \
+              --latest
+          fi
