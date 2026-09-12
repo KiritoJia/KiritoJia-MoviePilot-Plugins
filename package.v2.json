@@ -26,6 +26,21 @@
       "v1.0.0": "独立正式版：目录增量监控、五类字幕源、STRM 指纹、任务工作台和终态任务一键清理"
     }
   },
+  "EmbyMissingSubscribe": {
+    "name": "Emby缺集自动订阅",
+    "description": "扫描 Emby 媒体库，发现已播缺集后自动创建 MoviePilot 订阅。",
+    "labels": "Emby,订阅,缺集",
+    "version": "1.0.0",
+    "icon": "https://raw.githubusercontent.com/KiritoJia/KiritoJia-MoviePilot-Plugins/main/icons/EmbyMissingSubscribe.svg",
+    "author": "KiritoJia",
+    "level": 1,
+    "release": true,
+    "v2": true,
+    "system_version": ">=3.0.0",
+    "history": {
+      "v1.0.0": "首发版：扫描 Emby 电视剧缺集，按季创建 MoviePilot 订阅，支持定时与立即扫描。"
+    }
+  },
   "P115StrmHelper": {
     "name": "115网盘STRM助手（V3兼容版）",
     "description": "115网盘STRM生成、分享转存、离线下载与媒体库同步工具，适配 MoviePilot V3 / Python 3.12、3.14。",
