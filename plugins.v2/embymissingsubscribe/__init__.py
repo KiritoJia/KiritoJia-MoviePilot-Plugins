@@ -12,9 +12,9 @@ import requests
 from apscheduler.triggers.cron import CronTrigger
 from apscheduler.triggers.date import DateTrigger
 
-from app.application.configuration import get_chain_runtime_config_snapshot
 from app.chain.subscribe.facade import SubscribeChain
 from app.chain.tmdb import TmdbChain
+from app.core.config import settings
 from app.log import logger
 from app.plugins import _PluginBase
 from app.schemas.types import MediaSource, MediaType
@@ -290,7 +290,7 @@ class EmbyMissingSubscribe(_PluginBase):
         return TmdbChain().tmdb_episodes(tmdb_id, season) or []
 
     def _subscribe(self, series: dict[str, Any], tmdb_id: int, season: int, *, total_episode: int, lack_episode: int) -> tuple[Any, str]:
-        username = get_chain_runtime_config_snapshot().superuser
+        username = getattr(settings, "SUPERUSER", "") or "admin"
         return SubscribeChain().add(
             title=str(series.get("Name") or "").strip(),
             year=str(series.get("ProductionYear") or ""),
