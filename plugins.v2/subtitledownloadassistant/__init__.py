@@ -62,7 +62,8 @@ class SubtitleDownloadAssistant(_PluginBase):
     plugin_desc = "自动刮削媒体库影片字幕，支持常见视频格式及 STRM 格式。"
     plugin_icon = "https://raw.githubusercontent.com/KiritoJia/KiritoJia-MoviePilot-Plugins/main/icons/SubtitleDownloadAssistant.png"
     plugin_version = "1.1.11"
-    plugin_author = "Kirito"
+    plugin_author = "KiritoJia"
+    author_url = "https://github.com/KiritoJia/KiritoJia-MoviePilot-Plugins"
     plugin_label = "字幕"
     plugin_config_prefix = "subtitledownloadassistant_"
     plugin_order = 30

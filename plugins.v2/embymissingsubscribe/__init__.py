@@ -28,7 +28,7 @@ class EmbyMissingSubscribe(_PluginBase):
     plugin_icon = "https://raw.githubusercontent.com/KiritoJia/KiritoJia-MoviePilot-Plugins/main/icons/EmbyMissingSubscribe.svg"
     plugin_version = "1.0.2"
     plugin_author = "KiritoJia"
-    author_url = "https://github.com/KiritoJia"
+    author_url = "https://github.com/KiritoJia/KiritoJia-MoviePilot-Plugins"
     plugin_config_prefix = "embymissingsubscribe_"
     plugin_order = 46
     auth_level = 1

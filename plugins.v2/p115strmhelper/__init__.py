@@ -106,9 +106,9 @@ class P115StrmHelper(_PluginBase):
     # 插件版本
     plugin_version = VERSION
     # 插件作者
-    plugin_author = "DDSRem"
+    plugin_author = "KiritoJia"
     # 作者主页
-    author_url = "https://github.com/DDSRem"
+    author_url = "https://github.com/KiritoJia/KiritoJia-MoviePilot-Plugins"
     # 插件配置项ID前缀
     plugin_config_prefix = "p115strmhelper_"
     # 加载顺序

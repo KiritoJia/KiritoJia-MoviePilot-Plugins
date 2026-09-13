@@ -43,7 +43,7 @@ class P115StrgmSub(_PluginBase):
     # 插件版本
     plugin_version = "1.5.12"
     # 插件作者
-    plugin_author = "mrtian2016 / KiritoJia"
+    plugin_author = "KiritoJia"
     # 作者主页
     author_url = "https://github.com/KiritoJia/KiritoJia-MoviePilot-Plugins"
     # 插件配置项ID前缀
