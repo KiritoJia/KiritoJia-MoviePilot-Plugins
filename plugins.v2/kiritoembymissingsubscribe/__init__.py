@@ -8,6 +8,7 @@ from datetime import date, datetime, timedelta
 from pathlib import Path
 from threading import Lock
 from typing import Any
+from urllib.parse import urlencode
 
 import requests
 from apscheduler.triggers.cron import CronTrigger
@@ -31,7 +32,7 @@ class KiritoEmbyMissingSubscribe(_PluginBase):
     plugin_name = "Kirito Emby缺集自动订阅"
     plugin_desc = "扫描 Emby 媒体库，发现已播缺集后自动创建 MoviePilot 订阅"
     plugin_icon = "https://raw.githubusercontent.com/KiritoJia/KiritoJia-MoviePilot-Plugins/main/icons/KiritoEmbyMissingSubscribe.svg"
-    plugin_version = "1.0.5"
+    plugin_version = "1.0.6"
     plugin_author = "KiritoJia"
     author_url = "https://github.com/KiritoJia/KiritoJia-MoviePilot-Plugins"
     plugin_config_prefix = "kiritoembymissingsubscribe_"
@@ -92,7 +93,14 @@ class KiritoEmbyMissingSubscribe(_PluginBase):
         }]
 
     def get_summary(self) -> dict[str, Any]:
-        return self._last_summary or {"success": True, "message": "尚未执行扫描"}
+        if not self._last_summary:
+            return {"success": True, "message": "尚未执行扫描"}
+        result = dict(self._last_summary)
+        result["subscription_history"] = [
+            {**item, "poster": self._history_poster(item)}
+            for item in self._last_summary.get("subscription_history", [])
+        ]
+        return result
 
     def get_page(self) -> list[dict[str, Any]]:
         if not self._last_summary:
@@ -184,7 +192,7 @@ class KiritoEmbyMissingSubscribe(_PluginBase):
                     "UserId": self._user_id,
                     "IncludeItemTypes": "Series",
                     "Recursive": "true",
-                    "Fields": "ProviderIds,ProductionYear,ChildCount",
+                    "Fields": "ProviderIds,ProductionYear,ChildCount,ImageTags",
                     "StartIndex": 0,
                     "Limit": 10000,
                     "SortBy": "SortName",
@@ -202,6 +210,7 @@ class KiritoEmbyMissingSubscribe(_PluginBase):
                 "skipped": 0,
                 "missing_by_key": {},
                 "handled_by_key": dict(self._last_summary.get("handled_by_key", {})),
+                "subscription_history": list(self._last_summary.get("subscription_history", []))[:50],
             }
             for series in series_items:
                 try:
@@ -264,11 +273,47 @@ class KiritoEmbyMissingSubscribe(_PluginBase):
                     summary["existing_subscriptions"] += 1
                 else:
                     summary["subscriptions"] += 1
+                self._record_subscription(summary, key, series, season_number, missing, message)
                 logger.info(f"[Kirito Emby缺集自动订阅] {series.get('Name')} S{season_number:02d} 缺失 {missing}，{message}（ID: {sid}）")
             else:
                 summary["subscribe_failures"] += 1
                 logger.warning(f"[Kirito Emby缺集自动订阅] {series.get('Name')} S{season_number:02d} 订阅失败：{message}")
         return total_missing
+
+    def _record_subscription(
+        self,
+        summary: dict[str, Any],
+        key: str,
+        series: dict[str, Any],
+        season: int,
+        missing: list[int],
+        message: str,
+    ) -> None:
+        """保留最近订阅对象，供详情页展示并跨重启保留。"""
+        image_tag = str((series.get("ImageTags") or {}).get("Primary") or "")
+        history = [item for item in summary.get("subscription_history", []) if item.get("key") != key]
+        history.insert(0, {
+            "key": key,
+            "name": str(series.get("Name") or "未知剧集"),
+            "year": str(series.get("ProductionYear") or ""),
+            "season": season,
+            "missing": missing,
+            "item_id": str(series.get("Id") or ""),
+            "image_tag": image_tag,
+            "status": "已存在" if "已存在" in str(message) else "已创建",
+            "updated_at": summary.get("finished_at", ""),
+        })
+        summary["subscription_history"] = history[:50]
+
+    def _history_poster(self, item: dict[str, Any]) -> str:
+        item_id = str(item.get("item_id") or "").strip()
+        image_tag = str(item.get("image_tag") or "").strip()
+        if not item_id or not self._emby_url:
+            return ""
+        params = {"fillWidth": 240, "quality": 82, "api_key": self._api_key}
+        if image_tag:
+            params["tag"] = image_tag
+        return f"{self._emby_url}/Items/{item_id}/Images/Primary?{urlencode(params)}"
 
     @staticmethod
     def _episode_numbers(episodes: list[Any]) -> set[int]:

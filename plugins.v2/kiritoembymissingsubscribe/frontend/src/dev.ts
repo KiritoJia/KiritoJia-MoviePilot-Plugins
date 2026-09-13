@@ -28,6 +28,18 @@ const app = createApp(Config, {
       existing_subscriptions: 6,
       subscribe_failures: 0,
       skipped: 2,
+      subscription_history: [
+        {
+          key: '297438:S1',
+          name: '朱音落语',
+          year: '2026',
+          season: 1,
+          missing: [7, 9, 12],
+          poster: 'https://image.tmdb.org/t/p/w185/placeholder.jpg',
+          status: '已创建',
+          updated_at: '2026-09-12 23:46:08',
+        },
+      ],
     }),
   },
 })
