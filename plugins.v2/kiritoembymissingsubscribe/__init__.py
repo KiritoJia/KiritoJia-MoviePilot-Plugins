@@ -3,6 +3,7 @@
 from __future__ import annotations
 
 import json
+import inspect
 from datetime import date, datetime, timedelta
 from pathlib import Path
 from threading import Lock
@@ -21,7 +22,7 @@ from app.chain.tmdb import TmdbChain
 from app.core.config import settings
 from app.log import logger
 from app.plugins import _PluginBase
-from app.schemas.types import MediaSource, MediaType
+from app.schemas.types import MediaType
 
 
 class KiritoEmbyMissingSubscribe(_PluginBase):
@@ -30,7 +31,7 @@ class KiritoEmbyMissingSubscribe(_PluginBase):
     plugin_name = "Kirito Emby缺集自动订阅"
     plugin_desc = "扫描 Emby 媒体库，发现已播缺集后自动创建 MoviePilot 订阅"
     plugin_icon = "https://raw.githubusercontent.com/KiritoJia/KiritoJia-MoviePilot-Plugins/main/icons/KiritoEmbyMissingSubscribe.svg"
-    plugin_version = "1.0.4"
+    plugin_version = "1.0.5"
     plugin_author = "KiritoJia"
     author_url = "https://github.com/KiritoJia/KiritoJia-MoviePilot-Plugins"
     plugin_config_prefix = "kiritoembymissingsubscribe_"
@@ -295,19 +296,27 @@ class KiritoEmbyMissingSubscribe(_PluginBase):
 
     def _subscribe(self, series: dict[str, Any], tmdb_id: int, season: int, *, total_episode: int, lack_episode: int) -> tuple[Any, str]:
         username = getattr(settings, "SUPERUSER", "") or "admin"
-        return SubscribeChain().add(
-            title=str(series.get("Name") or "").strip(),
-            year=str(series.get("ProductionYear") or ""),
-            mtype=MediaType.TV,
-            season=season,
-            media_source=MediaSource.TMDB,
-            media_id=str(tmdb_id),
-            username=username,
-            message=False,
-            exist_ok=True,
-            total_episode=total_episode,
-            lack_episode=lack_episode,
-        )
+        add = SubscribeChain().add
+        params = inspect.signature(add).parameters
+        kwargs: dict[str, Any] = {
+            "title": str(series.get("Name") or "").strip(),
+            "year": str(series.get("ProductionYear") or ""),
+            "mtype": MediaType.TV,
+            "season": season,
+            "username": username,
+            "message": False,
+            "exist_ok": True,
+            "total_episode": total_episode,
+            "lack_episode": lack_episode,
+        }
+        if "tmdbid" in params:
+            kwargs["tmdbid"] = str(tmdb_id)
+        elif "media_source" in params and "media_id" in params:
+            kwargs["media_source"] = "themoviedb"
+            kwargs["media_id"] = str(tmdb_id)
+        else:
+            raise RuntimeError("当前 MoviePilot 订阅接口不支持 TMDB 媒体标识参数")
+        return add(**kwargs)
 
     def _request_json(self, session: requests.Session, url: str, params: dict[str, Any]) -> dict[str, Any]:
         request_params = dict(params)
