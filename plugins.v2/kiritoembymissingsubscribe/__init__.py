@@ -12,7 +12,11 @@ import requests
 from apscheduler.triggers.cron import CronTrigger
 from apscheduler.triggers.date import DateTrigger
 
-from app.chain.subscribe.facade import SubscribeChain
+try:
+    from app.chain.subscribe.facade import SubscribeChain
+except ImportError:
+    # MoviePilot V2 exposes SubscribeChain from app.chain.subscribe.
+    from app.chain.subscribe import SubscribeChain
 from app.chain.tmdb import TmdbChain
 from app.core.config import settings
 from app.log import logger
@@ -26,7 +30,7 @@ class KiritoEmbyMissingSubscribe(_PluginBase):
     plugin_name = "Kirito Emby缺集自动订阅"
     plugin_desc = "扫描 Emby 媒体库，发现已播缺集后自动创建 MoviePilot 订阅"
     plugin_icon = "https://raw.githubusercontent.com/KiritoJia/KiritoJia-MoviePilot-Plugins/main/icons/KiritoEmbyMissingSubscribe.svg"
-    plugin_version = "1.0.3"
+    plugin_version = "1.0.4"
     plugin_author = "KiritoJia"
     author_url = "https://github.com/KiritoJia/KiritoJia-MoviePilot-Plugins"
     plugin_config_prefix = "kiritoembymissingsubscribe_"
