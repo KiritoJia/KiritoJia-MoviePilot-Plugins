@@ -27,7 +27,7 @@
     }
   },
   "KiritoEmbyMissingSubscribe": {
-    "name": "Kirito Kirito Emby缺集自动订阅",
+    "name": "Kirito Emby缺集自动订阅",
     "description": "扫描 Emby 媒体库，发现已播缺集后自动创建 MoviePilot 订阅。",
     "labels": "Emby,订阅,缺集",
     "version": "1.0.3",

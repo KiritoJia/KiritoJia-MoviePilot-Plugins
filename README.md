@@ -1,6 +1,6 @@
 # KiritoJia MoviePilot 插件仓
 
-收录 Kirito 字幕下载助手、Kirito Kirito Emby缺集自动订阅、Kirito 115网盘订阅追更和 Kirito 115网盘STRM助手四个 MoviePilot V2 插件。
+收录 Kirito 字幕下载助手、Kirito Emby缺集自动订阅、Kirito 115网盘订阅追更和 Kirito 115网盘STRM助手四个 MoviePilot V2 插件。
 
 > 自动刮削媒体库影片字幕，支持常见视频格式及 STRM 格式。
 
@@ -33,7 +33,7 @@ package.json                          插件仓库元数据
 https://github.com/KiritoJia/KiritoJia-MoviePilot-Plugins
 ```
 
-添加后可在插件市场安装“Kirito 字幕下载助手”“Kirito Kirito Emby缺集自动订阅”“Kirito 115网盘订阅追更”或“Kirito 115网盘STRM助手”。仓库根目录的 `package.json` 会提供版本信息；在线安装和更新使用 MoviePilot 规范的 Release ZIP，避免逐文件下载。
+添加后可在插件市场安装“Kirito 字幕下载助手”“Kirito Emby缺集自动订阅”“Kirito 115网盘订阅追更”或“Kirito 115网盘STRM助手”。仓库根目录的 `package.json` 会提供版本信息；在线安装和更新使用 MoviePilot 规范的 Release ZIP，避免逐文件下载。
 
 [GitHub Releases](https://github.com/KiritoJia/KiritoJia-MoviePilot-Plugins/releases) 同时提供可本地上传的 ZIP。手工安装时，把插件目录复制到：
 
