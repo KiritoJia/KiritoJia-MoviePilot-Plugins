@@ -22,7 +22,7 @@
 https://github.com/KiritoJia/KiritoJia-MoviePilot-Plugins
 ```
 
-添加后可在插件市场安装和更新“字幕下载助手”。也可以从 [GitHub Releases](https://github.com/KiritoJia/KiritoJia-MoviePilot-Plugins/releases) 下载 ZIP 本地安装，或把 `subtitledownloadassistant` 目录放入：
+添加后可在插件市场安装和更新“Kirito 字幕下载助手”。也可以从 [GitHub Releases](https://github.com/KiritoJia/KiritoJia-MoviePilot-Plugins/releases) 下载 ZIP 本地安装，或把 `subtitledownloadassistant` 目录放入：
 
 ```text
 /app/app/plugins/subtitledownloadassistant
@@ -49,4 +49,4 @@ https://github.com/KiritoJia/KiritoJia-MoviePilot-Plugins
 
 ## 来源与许可证
 
-本项目基于 yubanmeiqin9048 的 `SubtitleAssistant 1.0.1` 修改，并继续使用 GNU GPL v3 许可证。射手 Hash、迅雷 CID 与公开接口协议参考 [91270/MeiamSubtitles](https://github.com/91270/MeiamSubtitles) 重新实现；项目不嵌入 Emby DLL，也不依赖 .NET 运行时。
+本项目是 KiritoJia 维护的独立发行版，遵循 GNU GPL v3 许可证。射手 Hash、迅雷 CID 与公开接口协议按公开协议重新实现；项目不嵌入 Emby DLL，也不依赖 .NET 运行时。

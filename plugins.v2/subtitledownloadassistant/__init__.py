@@ -58,7 +58,7 @@ def _handle_plugin_data_reset(event: Event) -> None:
 class SubtitleDownloadAssistant(_PluginBase):
     """提供字幕搜索、归属、落盘、维护与审计的全生命周期管理。"""
 
-    plugin_name = "字幕下载助手"
+    plugin_name = "Kirito 字幕下载助手"
     plugin_desc = "自动刮削媒体库影片字幕，支持常见视频格式及 STRM 格式。"
     plugin_icon = "https://raw.githubusercontent.com/KiritoJia/KiritoJia-MoviePilot-Plugins/main/icons/SubtitleDownloadAssistant.png"
     plugin_version = "1.1.11"

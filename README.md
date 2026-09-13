@@ -1,6 +1,6 @@
-# MoviePilot 插件仓
+# KiritoJia MoviePilot 插件仓
 
-收录“字幕下载助手”和“115网盘订阅追更（依赖修复版）”两个 MoviePilot V2 插件。
+收录 Kirito 字幕下载助手、Kirito Emby缺集自动订阅、Kirito 115网盘订阅追更和 Kirito 115网盘STRM助手四个 MoviePilot V2 插件。
 
 > 自动刮削媒体库影片字幕，支持常见视频格式及 STRM 格式。
 
@@ -17,8 +17,10 @@
 ## 仓库结构
 
 ```text
-plugins.v2/subtitledownloadassistant/  MoviePilot 插件
-plugins.v2/p115strgmsub/               115 网盘订阅追更插件
+plugins.v2/subtitledownloadassistant/  Kirito 字幕下载助手
+plugins.v2/embymissingsubscribe/       Kirito Emby 缺集自动订阅插件
+plugins.v2/kiritop115strgmsub/        Kirito 115 网盘订阅追更插件
+plugins.v2/kiritop115strmhelper/      Kirito 115 网盘 STRM 助手插件
 icons/                                插件图标
 package.json                          插件仓库元数据
 ```
@@ -31,7 +33,7 @@ package.json                          插件仓库元数据
 https://github.com/KiritoJia/KiritoJia-MoviePilot-Plugins
 ```
 
-添加后可在插件市场安装“字幕下载助手”或“115网盘订阅追更（依赖修复版）”。仓库根目录的 `package.json` 会提供版本信息；在线安装和更新使用 MoviePilot 规范的 Release ZIP，避免逐文件下载。
+添加后可在插件市场安装“Kirito 字幕下载助手”“Kirito Emby缺集自动订阅”“Kirito 115网盘订阅追更”或“Kirito 115网盘STRM助手”。仓库根目录的 `package.json` 会提供版本信息；在线安装和更新使用 MoviePilot 规范的 Release ZIP，避免逐文件下载。
 
 [GitHub Releases](https://github.com/KiritoJia/KiritoJia-MoviePilot-Plugins/releases) 同时提供可本地上传的 ZIP。手工安装时，把插件目录复制到：
 
@@ -47,11 +49,11 @@ https://github.com/KiritoJia/KiritoJia-MoviePilot-Plugins
 
 详细配置和运行要求见[插件说明](plugins.v2/subtitledownloadassistant/README.md)。
 
-“115网盘订阅追更（依赖修复版）”基于 `mrtian2016/MoviePilot-Plugins` 的 `P115StrgmSub 1.5.3`，保留原插件 ID 和配置空间，仅修复已下架的 `p115client` 依赖。它使用 `p115client 0.0.9.6.5.1`，不再需要手工修改容器内的 `requirements.txt`。
+“Kirito 115网盘订阅追更”是本仓库维护的独立发行版，使用独立插件 ID 和配置空间，不会覆盖其他同类插件；它使用 `p115client 0.0.9.6.5.1`，不再需要手工修改容器内的 `requirements.txt`。
 
 ## 项目关系
 
-这是一个具有独立插件 ID、配置和数据空间的修改版，不会覆盖原 `SubtitleAssistant`。代码基于 yubanmeiqin9048 的 `SubtitleAssistant 1.0.1`，原项目与本项目均按 GNU GPL v3 发布。射手/迅雷协议实现参考 [91270/MeiamSubtitles](https://github.com/91270/MeiamSubtitles)。
+这是一个具有独立插件 ID、配置和数据空间的 KiritoJia 独立发行版，不会覆盖其他字幕插件。项目遵循 GNU GPL v3；相关源代码和许可证信息保留在各插件目录中。射手/迅雷协议实现按公开协议重新实现。
 
 ## 许可证
 

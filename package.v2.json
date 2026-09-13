@@ -1,6 +1,6 @@
 {
   "SubtitleDownloadAssistant": {
-    "name": "字幕下载助手",
+    "name": "Kirito 字幕下载助手",
     "description": "自动刮削媒体库影片字幕，支持常见视频格式及 STRM 格式。",
     "labels": "字幕,自动化,STRM",
     "version": "1.1.11",
@@ -27,7 +27,7 @@
     }
   },
   "EmbyMissingSubscribe": {
-    "name": "Emby缺集自动订阅",
+    "name": "Kirito Emby缺集自动订阅",
     "description": "扫描 Emby 媒体库，发现已播缺集后自动创建 MoviePilot 订阅。",
     "labels": "Emby,订阅,缺集",
     "version": "1.0.2",
@@ -42,8 +42,8 @@
       "v1.0.0": "首发版：扫描 Emby 电视剧缺集，按季创建 MoviePilot 订阅，支持定时与立即扫描。"
     }
   },
-  "P115StrmHelper": {
-    "name": "115网盘STRM助手（V3兼容版）",
+  "KiritoP115StrmHelper": {
+    "name": "Kirito 115网盘STRM助手",
     "description": "115网盘STRM生成、分享转存、离线下载与媒体库同步工具，适配 MoviePilot V3 / Python 3.12、3.14。",
     "labels": "115网盘,STRM,同步",
     "version": "2.8.78",
@@ -62,8 +62,8 @@
       "v2.8.71": "同步上游插件版本。"
     }
   },
-  "P115StrgmSub": {
-    "name": "115网盘订阅追更（依赖修复版）",
+  "KiritoP115StrgmSub": {
+    "name": "Kirito 115网盘订阅追更",
     "description": "结合 MoviePilot 订阅功能，自动搜索 115 网盘资源并转存缺失剧集。",
     "labels": "订阅,115网盘",
     "version": "1.5.12",
@@ -78,7 +78,7 @@
       "v1.5.10": "更新 PanSou 默认地址为 https://ps.ugnas.xyz:998，并自动迁移旧地址配置",
       "v1.5.9": "兼容 MoviePilot V3 的 recognize_media 参数和下载历史媒体身份字段，并继续支持 V2 接口",
       "v1.5.8": "兼容 MoviePilot V3 订阅对象的 media_source 和 media_id 字段，修复订阅同步因缺少 tmdbid 而中断",
-      "v1.5.6": "修复 P115StrgmSub 详情页在历史数据异常时显示没有详情页面的问题",
+      "v1.5.6": "修复 KiritoP115StrgmSub 详情页在历史数据异常时显示没有详情页面的问题",
       "v1.5.5": "兼容新版 MoviePilot 的 tmdb:ID 媒体键，修复缺失剧集被误判为空",
       "v1.5.4": "修复 p115client 旧版本已下架导致的安装失败，并切换到兼容的当前依赖链",
       "v1.5.3": "同步原版插件功能"
