@@ -32,7 +32,7 @@ class KiritoEmbyMissingSubscribe(_PluginBase):
     plugin_name = "Kirito Emby缺集自动订阅"
     plugin_desc = "扫描 Emby 媒体库，发现已播缺集后自动创建 MoviePilot 订阅"
     plugin_icon = "https://raw.githubusercontent.com/KiritoJia/KiritoJia-MoviePilot-Plugins/main/icons/KiritoEmbyMissingSubscribe.svg"
-    plugin_version = "1.0.6"
+    plugin_version = "1.0.7"
     plugin_author = "KiritoJia"
     author_url = "https://github.com/KiritoJia/KiritoJia-MoviePilot-Plugins"
     plugin_config_prefix = "kiritoembymissingsubscribe_"
@@ -92,6 +92,23 @@ class KiritoEmbyMissingSubscribe(_PluginBase):
             "summary": "获取 Emby 缺集扫描状态",
         }]
 
+    def get_render_mode(self) -> tuple[str, str]:
+        """使用前端联邦组件渲染配置页。"""
+        return "vue", "frontend/dist/assets"
+
+    def get_form(self) -> tuple[None, dict[str, Any]]:
+        """Vue 配置页使用第二项作为初始配置数据。"""
+        return None, {
+            "enabled": self._enabled,
+            "onlyonce": self._onlyonce,
+            "emby_url": self._emby_url,
+            "user_id": self._user_id,
+            "api_key": self._api_key,
+            "cron": self._cron,
+            "aired_only": self._aired_only,
+            "timeout": self._timeout,
+        }
+
     def get_summary(self) -> dict[str, Any]:
         if not self._last_summary:
             return {"success": True, "message": "尚未执行扫描"}
@@ -102,46 +119,9 @@ class KiritoEmbyMissingSubscribe(_PluginBase):
         ]
         return result
 
-    def get_page(self) -> list[dict[str, Any]]:
-        if not self._last_summary:
-            return [{"component": "VAlert", "props": {"type": "info", "text": "尚未执行扫描"}}]
-        return [{
-            "component": "VAlert",
-            "props": {
-                "type": "info",
-                "variant": "tonal",
-                "text": (
-                    f"上次扫描：{self._last_summary.get('finished_at', '未执行')}；"
-                    f"剧集 {self._last_summary.get('series', 0)} 部；"
-                    f"发现缺集 {self._last_summary.get('missing', 0)} 集；"
-                    f"新增订阅 {self._last_summary.get('subscriptions', 0)} 个；"
-                    f"已有订阅 {self._last_summary.get('existing_subscriptions', 0)} 个"
-                ),
-            },
-        }]
-
-    def get_form(self) -> tuple[list[dict[str, Any]], dict[str, Any]]:
-        return [{
-            "component": "VForm",
-            "content": [
-                {"component": "VSwitch", "props": {"model": "enabled", "label": "启用插件"}},
-                {"component": "VSwitch", "props": {"model": "onlyonce", "label": "保存后立即扫描一次"}},
-                {"component": "VSwitch", "props": {"model": "aired_only", "label": "只订阅已播缺集"}},
-                {"component": "VTextField", "props": {"model": "emby_url", "label": "Emby 地址", "hint": "例如 http://192.168.1.20:8096", "persistent-hint": True}},
-                {"component": "VTextField", "props": {"model": "user_id", "label": "Emby 用户 ID", "hint": "填写 Emby 用户 UUID", "persistent-hint": True}},
-                {"component": "VTextField", "props": {"model": "api_key", "label": "Emby API Key", "type": "password"}},
-                {"component": "VCronField", "props": {"model": "cron", "label": "扫描周期", "placeholder": "0 */6 * * *"}},
-            ],
-        }], {
-            "enabled": False,
-            "onlyonce": False,
-            "emby_url": "",
-            "user_id": "",
-            "api_key": "",
-            "cron": "0 */6 * * *",
-            "aired_only": True,
-            "timeout": 20,
-        }
+    def get_page(self) -> None:
+        """Vue 配置页不使用 MoviePilot 原生页面定义。"""
+        return None
 
     def get_service(self) -> list[dict[str, Any]]:
         if not self._ready():

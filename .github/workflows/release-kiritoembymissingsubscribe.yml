@@ -18,7 +18,7 @@ jobs:
   release:
     runs-on: ubuntu-latest
     env:
-      VERSION: 1.0.6
+      VERSION: 1.0.7
       PLUGIN_DIR: plugins.v2/kiritoembymissingsubscribe
     steps:
       - uses: actions/checkout@v5
@@ -53,6 +53,6 @@ jobs:
           else
             gh release create "$TAG" "$ASSET" \
               --title "KiritoEmbyMissingSubscribe v${VERSION}" \
-              --notes "重新设计配置界面：增加连接、扫描策略、立即执行和运行概览分区；优化前端加载体积，并保留定时与立即扫描能力。" \
+              --notes "修复 Vue 配置页入口未声明导致 MoviePilot 继续显示旧原生表单的问题；启用新的工作台界面，并增加订阅历史媒体条目。" \
               --latest
           fi
