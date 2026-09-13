@@ -9,7 +9,7 @@ import Config from './components/Config.vue'
 
 const app = createApp(Config, {
   initialConfig: {
-    plugin_id: 'EmbyMissingSubscribe',
+    plugin_id: 'KiritoEmbyMissingSubscribe',
     enabled: true,
     emby_url: 'http://192.168.31.20:8096',
     user_id: '1472c63c9cfd1353dc8014d913fdcafa',

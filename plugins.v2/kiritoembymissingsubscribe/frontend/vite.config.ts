@@ -23,7 +23,7 @@ export default defineConfig({
   plugins: [
     vue(),
     federation({
-      name: 'EmbyMissingSubscribe',
+      name: 'KiritoEmbyMissingSubscribe',
       filename: 'remoteEntry.js',
       exposes: {'./Config': './src/components/Config.vue'},
       shared: {

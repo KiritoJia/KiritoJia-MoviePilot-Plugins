@@ -1,6 +1,6 @@
 {
-  "name": "moviepilot-plugin-embymissingsubscribe-frontend",
-  "version": "1.0.2",
+  "name": "moviepilot-plugin-kiritoembymissingsubscribe-frontend",
+  "version": "1.0.3",
   "private": true,
   "type": "module",
   "scripts": {"build": "vite build"},

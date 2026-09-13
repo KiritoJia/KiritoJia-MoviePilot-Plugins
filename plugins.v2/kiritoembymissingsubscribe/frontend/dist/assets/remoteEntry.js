@@ -44,7 +44,7 @@ const currentImports = {};
          }
          
           if (dontAppendStylesToHead) {
-            const key = 'css__EmbyMissingSubscribe__' + exposeItemName;
+            const key = 'css__KiritoEmbyMissingSubscribe__' + exposeItemName;
             window[key] = window[key] || [];
             window[key].push(href);
             return;

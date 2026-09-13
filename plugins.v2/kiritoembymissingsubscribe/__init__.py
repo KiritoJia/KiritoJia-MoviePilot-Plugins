@@ -20,16 +20,16 @@ from app.plugins import _PluginBase
 from app.schemas.types import MediaSource, MediaType
 
 
-class EmbyMissingSubscribe(_PluginBase):
+class KiritoEmbyMissingSubscribe(_PluginBase):
     """读取 Emby 电视剧缺集并创建 MoviePilot 季订阅。"""
 
-    plugin_name = "Kirito Emby缺集自动订阅"
+    plugin_name = "Kirito Kirito Emby缺集自动订阅"
     plugin_desc = "扫描 Emby 媒体库，发现已播缺集后自动创建 MoviePilot 订阅"
-    plugin_icon = "https://raw.githubusercontent.com/KiritoJia/KiritoJia-MoviePilot-Plugins/main/icons/EmbyMissingSubscribe.svg"
-    plugin_version = "1.0.2"
+    plugin_icon = "https://raw.githubusercontent.com/KiritoJia/KiritoJia-MoviePilot-Plugins/main/icons/KiritoEmbyMissingSubscribe.svg"
+    plugin_version = "1.0.3"
     plugin_author = "KiritoJia"
     author_url = "https://github.com/KiritoJia/KiritoJia-MoviePilot-Plugins"
-    plugin_config_prefix = "embymissingsubscribe_"
+    plugin_config_prefix = "kiritoembymissingsubscribe_"
     plugin_order = 46
     auth_level = 1
 
@@ -63,7 +63,7 @@ class EmbyMissingSubscribe(_PluginBase):
             self._timeout = 20
         self._last_summary = self._load_state()
         if self._enabled and not self._ready():
-            logger.warning("[Emby缺集自动订阅] 配置不完整，插件未启动")
+            logger.warning("[Kirito Emby缺集自动订阅] 配置不完整，插件未启动")
             self._enabled = False
             self.__update_config()
 
@@ -136,7 +136,7 @@ class EmbyMissingSubscribe(_PluginBase):
         services: list[dict[str, Any]] = []
         if self._onlyonce:
             services.append({
-                "id": "EmbyMissingSubscribeScanOnce",
+                "id": "KiritoEmbyMissingSubscribeScanOnce",
                 "name": "Emby缺集立即扫描",
                 "trigger": DateTrigger(run_date=datetime.now() + timedelta(seconds=3)),
                 "func": self._scan_once,
@@ -145,14 +145,14 @@ class EmbyMissingSubscribe(_PluginBase):
         if self._enabled and self._cron:
             try:
                 services.append({
-                    "id": "EmbyMissingSubscribeScan",
-                    "name": "Emby缺集自动订阅扫描",
+                    "id": "KiritoEmbyMissingSubscribeScan",
+                    "name": "Kirito Emby缺集自动订阅扫描",
                     "trigger": CronTrigger.from_crontab(self._cron),
                     "func": self.scan_library,
                     "kwargs": {},
                 })
             except ValueError as exc:
-                logger.error(f"[Emby缺集自动订阅] cron 配置无效：{exc}")
+                logger.error(f"[Kirito Emby缺集自动订阅] cron 配置无效：{exc}")
         return services
 
     def stop_service(self) -> None:
@@ -203,16 +203,16 @@ class EmbyMissingSubscribe(_PluginBase):
                     summary["missing"] += self._scan_series(session, series, summary, force=force)
                 except Exception as exc:  # noqa: BLE001
                     summary["skipped"] += 1
-                    logger.warning(f"[Emby缺集自动订阅] 扫描 {series.get('Name', '未知剧集')} 失败：{exc}")
+                    logger.warning(f"[Kirito Emby缺集自动订阅] 扫描 {series.get('Name', '未知剧集')} 失败：{exc}")
             self._last_summary = summary
             self._save_state(summary)
             logger.info(
-                f"[Emby缺集自动订阅] 扫描完成：剧集 {summary['series']} 部，"
+                f"[Kirito Emby缺集自动订阅] 扫描完成：剧集 {summary['series']} 部，"
                 f"缺集 {summary['missing']} 集，新增订阅 {summary['subscriptions']} 个"
             )
             return summary
         except Exception as exc:  # noqa: BLE001
-            logger.error(f"[Emby缺集自动订阅] 扫描失败：{exc}")
+            logger.error(f"[Kirito Emby缺集自动订阅] 扫描失败：{exc}")
             return {"success": False, "message": str(exc)}
         finally:
             session.close()
@@ -259,10 +259,10 @@ class EmbyMissingSubscribe(_PluginBase):
                     summary["existing_subscriptions"] += 1
                 else:
                     summary["subscriptions"] += 1
-                logger.info(f"[Emby缺集自动订阅] {series.get('Name')} S{season_number:02d} 缺失 {missing}，{message}（ID: {sid}）")
+                logger.info(f"[Kirito Emby缺集自动订阅] {series.get('Name')} S{season_number:02d} 缺失 {missing}，{message}（ID: {sid}）")
             else:
                 summary["subscribe_failures"] += 1
-                logger.warning(f"[Emby缺集自动订阅] {series.get('Name')} S{season_number:02d} 订阅失败：{message}")
+                logger.warning(f"[Kirito Emby缺集自动订阅] {series.get('Name')} S{season_number:02d} 订阅失败：{message}")
         return total_missing
 
     @staticmethod

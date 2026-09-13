@@ -1,4 +1,4 @@
-# Emby缺集自动订阅
+# Kirito Emby缺集自动订阅
 
 MoviePilot V3 插件。它会读取 Emby 中的电视剧、季和已有集数，通过 TMDB 判断已播缺集，然后调用 MoviePilot 原生订阅流程。
 
