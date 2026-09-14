@@ -560,7 +560,8 @@ class KiritoEmbyMissingSubscribe(_PluginBase):
             "mtype": MediaType.TV,
             "season": season,
             "username": username,
-            "message": False,
+            # 交给 MoviePilot 原生订阅通知链路发送“订阅已添加”消息。
+            "message": True,
             "exist_ok": True,
             "total_episode": total_episode,
             "lack_episode": lack_episode,

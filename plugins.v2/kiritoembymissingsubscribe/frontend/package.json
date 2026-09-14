@@ -1,6 +1,6 @@
 {
   "name": "moviepilot-plugin-kiritoembymissingsubscribe-frontend",
-  "version": "1.0.12",
+  "version": "1.0.13",
   "private": true,
   "type": "module",
   "scripts": {"build": "vite build"},
