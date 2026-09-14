@@ -27,7 +27,6 @@ export default defineConfig({
       filename: 'remoteEntry.js',
       exposes: {
         './AppPage': './src/components/AppPage.vue',
-        './AppPageKiritoEmbyMissingSubscribe': './src/components/AppPage.vue',
         './Config': './src/components/Config.vue',
       },
       shared: {

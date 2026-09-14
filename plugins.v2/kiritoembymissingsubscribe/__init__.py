@@ -33,7 +33,7 @@ class KiritoEmbyMissingSubscribe(_PluginBase):
     plugin_name = "Kirito Emby缺集自动订阅"
     plugin_desc = "扫描 Emby 媒体库，发现已播缺集后自动创建 MoviePilot 订阅"
     plugin_icon = "https://raw.githubusercontent.com/KiritoJia/KiritoJia-MoviePilot-Plugins/main/icons/KiritoEmbyMissingSubscribe.svg"
-    plugin_version = "1.0.9"
+    plugin_version = "1.0.10"
     plugin_author = "KiritoJia"
     author_url = "https://github.com/KiritoJia/KiritoJia-MoviePilot-Plugins"
     plugin_config_prefix = "kiritoembymissingsubscribe_"
