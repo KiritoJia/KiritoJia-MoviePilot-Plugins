@@ -18,7 +18,7 @@ jobs:
   release:
     runs-on: ubuntu-latest
     env:
-      VERSION: 1.0.14
+      VERSION: 1.0.15
       PLUGIN_DIR: plugins.v2/kiritoembymissingsubscribe
     steps:
       - uses: actions/checkout@v5
@@ -55,6 +55,6 @@ jobs:
           else
             gh release create "$TAG" "$ASSET" \
               --title "KiritoEmbyMissingSubscribe v${VERSION}" \
-              --notes "修正插件主类版本号未同步，确保 MoviePilot 能识别并更新到启用原生订阅通知的版本。" \
+              --notes "按 115 网盘订阅追更插件方式补充新建订阅和复用订阅通知，避免订阅成功后无提醒。" \
               --latest
           fi

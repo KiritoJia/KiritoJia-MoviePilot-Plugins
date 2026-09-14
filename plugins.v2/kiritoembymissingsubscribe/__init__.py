@@ -35,7 +35,7 @@ class KiritoEmbyMissingSubscribe(_PluginBase):
     plugin_name = "Kirito Emby缺集自动订阅"
     plugin_desc = "扫描 Emby 媒体库，发现已播缺集后自动创建 MoviePilot 订阅"
     plugin_icon = "https://raw.githubusercontent.com/KiritoJia/KiritoJia-MoviePilot-Plugins/main/icons/KiritoEmbyMissingSubscribe.svg"
-    plugin_version = "1.0.14"
+    plugin_version = "1.0.15"
     plugin_author = "KiritoJia"
     author_url = "https://github.com/KiritoJia/KiritoJia-MoviePilot-Plugins"
     plugin_config_prefix = "kiritoembymissingsubscribe_"
@@ -383,10 +383,16 @@ class KiritoEmbyMissingSubscribe(_PluginBase):
                     summary["existing_subscription_details"].append(
                         self._subscription_detail(series, season_number, missing, key, "已复用")
                     )
+                    self._send_subscription_notification(
+                        series, season_number, missing, str(message), existing=True
+                    )
                 else:
                     summary["subscriptions"] += 1
                     summary["new_subscriptions"].append(
                         self._subscription_detail(series, season_number, missing, key, "已创建")
+                    )
+                    self._send_subscription_notification(
+                        series, season_number, missing, str(message), existing=False
                     )
                 self._record_subscription(summary, key, series, season_number, missing, message)
                 logger.info(f"[Kirito Emby缺集自动订阅] {series.get('Name')} S{season_number:02d} 缺失 {missing}，{message}（ID: {sid}）")
@@ -560,8 +566,8 @@ class KiritoEmbyMissingSubscribe(_PluginBase):
             "mtype": MediaType.TV,
             "season": season,
             "username": username,
-            # 交给 MoviePilot 原生订阅通知链路发送“订阅已添加”消息。
-            "message": True,
+            # 订阅成功后按 115 追更插件的方式由本插件明确发送通知，避免 V2/V3 接口差异导致漏发或重复。
+            "message": False,
             "exist_ok": True,
             "total_episode": total_episode,
             "lack_episode": lack_episode,
@@ -574,6 +580,29 @@ class KiritoEmbyMissingSubscribe(_PluginBase):
         else:
             raise RuntimeError("当前 MoviePilot 订阅接口不支持 TMDB 媒体标识参数")
         return add(**kwargs)
+
+    def _send_subscription_notification(
+        self,
+        series: dict[str, Any],
+        season: int,
+        missing: list[int],
+        message: str,
+        *,
+        existing: bool,
+    ) -> None:
+        """按 115 追更插件的 post_message 方式发送订阅结果通知。"""
+        if not self._notify_enabled:
+            return
+        if existing and not self._notify_existing:
+            return
+        if not existing and not self._notify_new:
+            return
+        name = str(series.get("Name") or "未知剧集")
+        status = "复用已有订阅" if existing else "已创建订阅"
+        text = f"{name} 第 {season} 季 {status}。\n缺失集数：{self._format_missing(missing)}"
+        if message and "已存在" in message:
+            text += f"\nMoviePilot 返回：{message}"
+        self._send_notification("【Emby缺集自动订阅】订阅结果", text)
 
     def _request_json(self, session: requests.Session, url: str, params: dict[str, Any]) -> dict[str, Any]:
         request_params = dict(params)
