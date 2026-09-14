@@ -6,7 +6,8 @@ interface SubscriptionRecord { key?: string; name?: string; year?: string; seaso
 interface Summary {
   success?: boolean; finished_at?: string; series?: number; missing?: number; subscriptions?: number
   existing_subscriptions?: number; subscribe_failures?: number; skipped?: number; message?: string
-  subscription_history?: SubscriptionRecord[]
+  subscription_history?: SubscriptionRecord[]; subscription_history_total?: number
+  subscription_history_page?: number; subscription_history_page_size?: number; subscription_history_total_pages?: number
 }
 interface ConfigModel {
   enabled?: boolean; onlyonce?: boolean; emby_url?: string; user_id?: string; api_key?: string
@@ -32,6 +33,10 @@ const revealKey = ref(false)
 const message = ref('')
 const messageType = ref<'success' | 'error' | 'info'>('info')
 const summary = ref<Summary | null>(null)
+const historyPage = ref(1)
+const historyPageSize = ref(10)
+const historyLoading = ref(false)
+const historyPageSizeOptions = [10, 20, 50]
 
 emit('layout', { maxWidth: '78rem' })
 watch(() => props.initialConfig, applyConfig, { immediate: true, deep: true })
@@ -41,8 +46,19 @@ const pluginId = computed(() => String(props.initialConfig?.plugin_id || '').tri
 const statusLabel = computed(() => form.value.enabled ? '自动扫描已启用' : '自动扫描已停用')
 const statusColor = computed(() => form.value.enabled ? 'success' : 'default')
 const history = computed(() => summary.value?.subscription_history || [])
+const historyTotal = computed(() => summary.value?.subscription_history_total ?? history.value.length)
+const historyTotalPages = computed(() => summary.value?.subscription_history_total_pages ?? Math.max(1, Math.ceil(historyTotal.value / historyPageSize.value)))
 
-onMounted(() => { void loadSummary() })
+watch(historyPageSize, () => {
+  historyPage.value = 1
+  void loadSummary(1, historyPageSize.value)
+})
+
+watch(historyPage, value => {
+  if (value !== summary.value?.subscription_history_page) void loadSummary(value, historyPageSize.value)
+})
+
+onMounted(() => { void loadSummary(historyPage.value, historyPageSize.value) })
 
 function applyConfig(value?: ConfigModel): void {
   const initial = value || {}
@@ -56,11 +72,23 @@ function applyConfig(value?: ConfigModel): void {
     notify_only_changes: initial.notify_only_changes !== false,
   }
   summary.value = initial.last_summary || null
+  historyPage.value = Number(initial.last_summary?.subscription_history_page || 1)
+  historyPageSize.value = Number(initial.last_summary?.subscription_history_page_size || 10)
 }
 
-async function loadSummary(): Promise<void> {
+async function loadSummary(page = historyPage.value, pageSize = historyPageSize.value): Promise<void> {
   if (!props.api || !pluginId.value) return
-  try { summary.value = await props.api.get<Summary>(`plugin/${encodeURIComponent(pluginId.value)}/summary`) } catch { summary.value = null }
+  historyLoading.value = true
+  try {
+    const query = new URLSearchParams({ page: String(page), page_size: String(pageSize) })
+    summary.value = await props.api.get<Summary>(`plugin/${encodeURIComponent(pluginId.value)}/summary?${query.toString()}`)
+    historyPage.value = Number(summary.value.subscription_history_page || page)
+    historyPageSize.value = Number(summary.value.subscription_history_page_size || pageSize)
+  } catch {
+    summary.value = null
+  } finally {
+    historyLoading.value = false
+  }
 }
 
 function save(): void {
@@ -76,7 +104,7 @@ function scanNow(): void {
   scanning.value = true
   emit('save', { ...props.initialConfig, ...form.value, onlyonce: true })
   setMessage('已提交一次性扫描，完成后这里会显示订阅记录。', 'info')
-  window.setTimeout(() => { scanning.value = false; void loadSummary() }, 1500)
+  window.setTimeout(() => { scanning.value = false; historyPage.value = 1; void loadSummary(1, historyPageSize.value) }, 1500)
 }
 
 async function testNotification(): Promise<void> {
@@ -158,13 +186,18 @@ function setMessage(text: string, type: 'success' | 'error' | 'info'): void {
       <section class="action-panel"><div class="action-copy"><div class="action-icon"><VIcon icon="mdi-play-circle-outline" size="24" /></div><div><h2>立即扫描媒体库</h2><p>提交后在后台读取 Emby，全量检查缺集并创建订阅，不会重复创建已有订阅。</p></div></div><VBtn color="primary" variant="flat" prepend-icon="mdi-play" :loading="scanning" :disabled="!ready" @click="scanNow">立即扫描</VBtn></section>
 
       <section class="panel history-panel">
-        <div class="history-head"><div class="section-head section-head--inline"><div class="section-index">04</div><div><h2>订阅历史</h2><p>展示最近实际创建或复用的订阅，包含对应媒体海报和缺集。</p></div></div><VBtn icon="mdi-refresh" variant="text" aria-label="刷新订阅历史" :loading="scanning" @click="loadSummary" /></div>
+        <div class="history-head"><div class="section-head section-head--inline"><div class="section-index">04</div><div><h2>订阅历史</h2><p>展示最近实际创建或复用的订阅，包含对应媒体海报和缺集。</p></div></div><VBtn icon="mdi-refresh" variant="text" aria-label="刷新订阅历史" :loading="historyLoading" @click="loadSummary(historyPage, historyPageSize)" /></div>
         <div v-if="!history.length" class="empty-history"><VIcon icon="mdi-filmstrip-off" size="30" /><span>扫描后，订阅记录会显示在这里</span></div>
         <div v-else class="history-list">
           <article v-for="item in history" :key="item.key || `${item.name}-${item.season}`" class="history-item">
             <VImg v-if="item.poster" :src="item.poster" class="poster" cover :alt="item.name || '媒体海报'" /><div v-else class="poster poster--empty"><VIcon icon="mdi-movie-open-outline" size="24" /></div>
             <div class="history-main"><div class="history-title"><strong>{{ item.name || '未知剧集' }}</strong><VChip size="x-small" :color="item.status === '已创建' ? 'success' : 'default'" variant="tonal" label>{{ item.status || '已处理' }}</VChip></div><span class="history-meta">{{ item.year || '年份未知' }} · 第 {{ item.season || '-' }} 季 · {{ formatMissing(item.missing) }}</span><span class="history-time">处理于 {{ formatTime(item.updated_at) }}</span></div>
           </article>
+        </div>
+        <div v-if="historyTotal" class="history-pagination">
+          <span class="history-total">共 {{ historyTotal }} 条</span>
+          <VPagination v-model="historyPage" :length="historyTotalPages" :total-visible="5" density="comfortable" class="history-pages" :disabled="historyLoading" />
+          <VSelect v-model="historyPageSize" :items="historyPageSizeOptions" label="每页" density="compact" hide-details class="history-page-size" :disabled="historyLoading" />
         </div>
       </section>
     </form>
@@ -183,5 +216,6 @@ function setMessage(text: string, type: 'success' | 'error' | 'info'): void {
 .notification-panel .section-head { align-items: flex-start; }.notification-panel .section-head > div:nth-child(2) { flex: 1; }.test-notify { flex: 0 0 auto; }.notification-grid { margin-top: 20px; }.changes-switch { margin-top: 14px; }
 .action-panel { justify-content: space-between; gap: 18px; padding: 18px 20px; border: 1px solid rgba(var(--v-theme-primary), .22); background: rgba(var(--v-theme-primary), .045); }.action-copy { display: flex; align-items: flex-start; gap: 12px; }.action-icon { display: grid; place-items: center; width: 38px; height: 38px; flex: 0 0 38px; color: rgb(var(--v-theme-primary)); border-radius: 9px; background: rgba(var(--v-theme-primary), .12); }
 .history-head { justify-content: space-between; gap: 12px; }.section-head--inline { flex: 1; }.empty-history { display: grid; place-items: center; gap: 8px; min-height: 140px; margin-top: 18px; color: var(--muted); font-size: 12px; border: 1px dashed var(--line); background: var(--soft); }.history-list { display: grid; gap: 8px; margin-top: 18px; }.history-item { display: flex; align-items: center; gap: 12px; min-width: 0; padding: 10px; border: 1px solid var(--line); background: var(--soft); }.poster { width: 48px; height: 68px; flex: 0 0 48px; border-radius: 5px; background: rgba(var(--v-theme-on-surface), .08); }.poster--empty { display: grid; place-items: center; color: var(--muted); }.history-main { min-width: 0; flex: 1; }.history-title { gap: 8px; min-width: 0; }.history-title strong { overflow: hidden; text-overflow: ellipsis; white-space: nowrap; font-size: 13px; }.history-meta, .history-time { display: block; color: var(--muted); font-size: 11px; }.history-meta { margin-top: 6px; }.history-time { margin-top: 4px; font-size: 10px; }.footer-actions { justify-content: flex-end; gap: 8px; padding-top: 16px; }
-@media (max-width: 820px) { .emby-config { padding: 14px 12px 20px; }.topbar__actions .v-chip { max-width: 150px; }.intro { align-items: flex-start; flex-direction: column; gap: 12px; }.intro h1 { font-size: 21px; }.last-run { text-align: left; }.stats-strip { grid-template-columns: repeat(2, minmax(0, 1fr)); }.stat:last-child { grid-column: span 2; }.field-grid--connection, .field-grid--rules, .rule-grid { grid-template-columns: 1fr; }.action-panel { align-items: flex-start; flex-direction: column; }.action-panel .v-btn { width: 100%; }.footer-actions { position: sticky; bottom: 0; z-index: 2; padding: 12px 0 0; background: rgb(var(--v-theme-surface)); } }
+.history-pagination { display: flex; align-items: center; justify-content: flex-end; gap: 14px; margin-top: 18px; padding-top: 14px; border-top: 1px solid var(--line); }.history-total { min-width: 52px; color: var(--muted); font-size: 12px; white-space: nowrap; }.history-pages { flex: 1; }.history-page-size { width: 92px; flex: 0 0 92px; }
+@media (max-width: 820px) { .emby-config { padding: 14px 12px 20px; }.topbar__actions .v-chip { max-width: 150px; }.intro { align-items: flex-start; flex-direction: column; gap: 12px; }.intro h1 { font-size: 21px; }.last-run { text-align: left; }.stats-strip { grid-template-columns: repeat(2, minmax(0, 1fr)); }.stat:last-child { grid-column: span 2; }.field-grid--connection, .field-grid--rules, .rule-grid { grid-template-columns: 1fr; }.action-panel { align-items: flex-start; flex-direction: column; }.action-panel .v-btn { width: 100%; }.history-pagination { justify-content: space-between; gap: 8px; }.history-pages { min-width: 0; }.history-pages :deep(.v-pagination__list) { gap: 1px; }.history-page-size { width: 84px; flex-basis: 84px; }.footer-actions { position: sticky; bottom: 0; z-index: 2; padding: 12px 0 0; background: rgb(var(--v-theme-surface)); } }
 </style>

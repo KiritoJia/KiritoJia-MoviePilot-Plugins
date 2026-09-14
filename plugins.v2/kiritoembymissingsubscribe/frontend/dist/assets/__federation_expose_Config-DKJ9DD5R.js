@@ -66,7 +66,12 @@ const _hoisted_47 = { class: "history-main" };
 const _hoisted_48 = { class: "history-title" };
 const _hoisted_49 = { class: "history-meta" };
 const _hoisted_50 = { class: "history-time" };
-const _hoisted_51 = { class: "footer-actions" };
+const _hoisted_51 = {
+  key: 2,
+  class: "history-pagination"
+};
+const _hoisted_52 = { class: "history-total" };
+const _hoisted_53 = { class: "footer-actions" };
 const {computed,inject,onMounted,ref,watch} = await importShared('vue');
 
 const _sfc_main = /* @__PURE__ */ _defineComponent({
@@ -104,6 +109,10 @@ const _sfc_main = /* @__PURE__ */ _defineComponent({
     const message = ref("");
     const messageType = ref("info");
     const summary = ref(null);
+    const historyPage = ref(1);
+    const historyPageSize = ref(10);
+    const historyLoading = ref(false);
+    const historyPageSizeOptions = [10, 20, 50];
     emit("layout", { maxWidth: "78rem" });
     watch(() => props.initialConfig, applyConfig, { immediate: true, deep: true });
     const ready = computed(() => Boolean(form.value.emby_url.trim() && form.value.user_id.trim() && form.value.api_key.trim()));
@@ -112,8 +121,17 @@ const _sfc_main = /* @__PURE__ */ _defineComponent({
     const statusLabel = computed(() => form.value.enabled ? "自动扫描已启用" : "自动扫描已停用");
     const statusColor = computed(() => form.value.enabled ? "success" : "default");
     const history = computed(() => summary.value?.subscription_history || []);
+    const historyTotal = computed(() => summary.value?.subscription_history_total ?? history.value.length);
+    const historyTotalPages = computed(() => summary.value?.subscription_history_total_pages ?? Math.max(1, Math.ceil(historyTotal.value / historyPageSize.value)));
+    watch(historyPageSize, () => {
+      historyPage.value = 1;
+      void loadSummary(1, historyPageSize.value);
+    });
+    watch(historyPage, (value) => {
+      if (value !== summary.value?.subscription_history_page) void loadSummary(value, historyPageSize.value);
+    });
     onMounted(() => {
-      void loadSummary();
+      void loadSummary(historyPage.value, historyPageSize.value);
     });
     function applyConfig(value) {
       const initial = value || {};
@@ -135,13 +153,21 @@ const _sfc_main = /* @__PURE__ */ _defineComponent({
         notify_only_changes: initial.notify_only_changes !== false
       };
       summary.value = initial.last_summary || null;
+      historyPage.value = Number(initial.last_summary?.subscription_history_page || 1);
+      historyPageSize.value = Number(initial.last_summary?.subscription_history_page_size || 10);
     }
-    async function loadSummary() {
+    async function loadSummary(page = historyPage.value, pageSize = historyPageSize.value) {
       if (!props.api || !pluginId.value) return;
+      historyLoading.value = true;
       try {
-        summary.value = await props.api.get(`plugin/${encodeURIComponent(pluginId.value)}/summary`);
+        const query = new URLSearchParams({ page: String(page), page_size: String(pageSize) });
+        summary.value = await props.api.get(`plugin/${encodeURIComponent(pluginId.value)}/summary?${query.toString()}`);
+        historyPage.value = Number(summary.value.subscription_history_page || page);
+        historyPageSize.value = Number(summary.value.subscription_history_page_size || pageSize);
       } catch {
         summary.value = null;
+      } finally {
+        historyLoading.value = false;
       }
     }
     function save() {
@@ -166,7 +192,8 @@ const _sfc_main = /* @__PURE__ */ _defineComponent({
       setMessage("已提交一次性扫描，完成后这里会显示订阅记录。", "info");
       window.setTimeout(() => {
         scanning.value = false;
-        void loadSummary();
+        historyPage.value = 1;
+        void loadSummary(1, historyPageSize.value);
       }, 1500);
     }
     async function testNotification() {
@@ -202,6 +229,8 @@ const _sfc_main = /* @__PURE__ */ _defineComponent({
       const _component_VTextField = _resolveComponent("VTextField");
       const _component_VSwitch = _resolveComponent("VSwitch");
       const _component_VImg = _resolveComponent("VImg");
+      const _component_VPagination = _resolveComponent("VPagination");
+      const _component_VSelect = _resolveComponent("VSelect");
       return _openBlock(), _createElementBlock("section", _hoisted_1, [
         _createElementVNode("header", _hoisted_2, [
           _createElementVNode("div", _hoisted_3, [
@@ -211,7 +240,7 @@ const _sfc_main = /* @__PURE__ */ _defineComponent({
                 size: "24"
               })
             ]),
-            _cache[18] || (_cache[18] = _createElementVNode("div", { class: "eyebrow" }, "EMBY / MISSING EPISODES", -1))
+            _cache[21] || (_cache[21] = _createElementVNode("div", { class: "eyebrow" }, "EMBY / MISSING EPISODES", -1))
           ]),
           _createElementVNode("div", _hoisted_5, [
             _createVNode(_component_VChip, {
@@ -234,12 +263,12 @@ const _sfc_main = /* @__PURE__ */ _defineComponent({
           ])
         ]),
         _createElementVNode("div", _hoisted_6, [
-          _cache[20] || (_cache[20] = _createElementVNode("div", null, [
+          _cache[23] || (_cache[23] = _createElementVNode("div", null, [
             _createElementVNode("h1", null, "Emby 缺集自动订阅"),
             _createElementVNode("p", null, "扫描 Emby 媒体库，发现已播缺集后自动创建 MoviePilot 订阅。")
           ], -1)),
           _createElementVNode("div", _hoisted_7, [
-            _cache[19] || (_cache[19] = _createElementVNode("span", null, "最近扫描", -1)),
+            _cache[22] || (_cache[22] = _createElementVNode("span", null, "最近扫描", -1)),
             _createElementVNode("strong", null, _toDisplayString(formatTime(summary.value?.finished_at)), 1)
           ])
         ]),
@@ -259,23 +288,23 @@ const _sfc_main = /* @__PURE__ */ _defineComponent({
         }, 8, ["type"])) : _createCommentVNode("", true),
         _createElementVNode("div", _hoisted_8, [
           _createElementVNode("div", _hoisted_9, [
-            _cache[21] || (_cache[21] = _createElementVNode("span", null, "媒体剧集", -1)),
+            _cache[24] || (_cache[24] = _createElementVNode("span", null, "媒体剧集", -1)),
             _createElementVNode("strong", null, _toDisplayString(summary.value?.series ?? "--"), 1)
           ]),
           _createElementVNode("div", _hoisted_10, [
-            _cache[22] || (_cache[22] = _createElementVNode("span", null, "发现缺集", -1)),
+            _cache[25] || (_cache[25] = _createElementVNode("span", null, "发现缺集", -1)),
             _createElementVNode("strong", null, _toDisplayString(summary.value?.missing ?? "--"), 1)
           ]),
           _createElementVNode("div", _hoisted_11, [
-            _cache[23] || (_cache[23] = _createElementVNode("span", null, "新增订阅", -1)),
+            _cache[26] || (_cache[26] = _createElementVNode("span", null, "新增订阅", -1)),
             _createElementVNode("strong", _hoisted_12, _toDisplayString(summary.value?.subscriptions ?? "--"), 1)
           ]),
           _createElementVNode("div", _hoisted_13, [
-            _cache[24] || (_cache[24] = _createElementVNode("span", null, "已有订阅", -1)),
+            _cache[27] || (_cache[27] = _createElementVNode("span", null, "已有订阅", -1)),
             _createElementVNode("strong", null, _toDisplayString(summary.value?.existing_subscriptions ?? "--"), 1)
           ]),
           _createElementVNode("div", _hoisted_14, [
-            _cache[25] || (_cache[25] = _createElementVNode("span", null, "扫描跳过", -1)),
+            _cache[28] || (_cache[28] = _createElementVNode("span", null, "扫描跳过", -1)),
             _createElementVNode("strong", null, _toDisplayString(summary.value?.skipped ?? "--"), 1)
           ])
         ]),
@@ -285,7 +314,7 @@ const _sfc_main = /* @__PURE__ */ _defineComponent({
           onSubmit: _withModifiers(save, ["prevent"])
         }, [
           _createElementVNode("section", _hoisted_15, [
-            _cache[26] || (_cache[26] = _createElementVNode("div", { class: "section-head" }, [
+            _cache[29] || (_cache[29] = _createElementVNode("div", { class: "section-head" }, [
               _createElementVNode("div", { class: "section-index" }, "01"),
               _createElementVNode("div", null, [
                 _createElementVNode("h2", null, "连接 Emby"),
@@ -343,7 +372,7 @@ const _sfc_main = /* @__PURE__ */ _defineComponent({
             ])
           ]),
           _createElementVNode("section", _hoisted_17, [
-            _cache[29] || (_cache[29] = _createElementVNode("div", { class: "section-head" }, [
+            _cache[32] || (_cache[32] = _createElementVNode("div", { class: "section-head" }, [
               _createElementVNode("div", { class: "section-index" }, "02"),
               _createElementVNode("div", null, [
                 _createElementVNode("h2", null, "扫描规则"),
@@ -358,7 +387,7 @@ const _sfc_main = /* @__PURE__ */ _defineComponent({
                     size: "20"
                   })
                 ]),
-                _cache[27] || (_cache[27] = _createElementVNode("div", { class: "rule-copy" }, [
+                _cache[30] || (_cache[30] = _createElementVNode("div", { class: "rule-copy" }, [
                   _createElementVNode("strong", null, "启用自动扫描"),
                   _createElementVNode("span", null, "按设定周期检查 Emby 媒体库")
                 ], -1)),
@@ -377,7 +406,7 @@ const _sfc_main = /* @__PURE__ */ _defineComponent({
                     size: "20"
                   })
                 ]),
-                _cache[28] || (_cache[28] = _createElementVNode("div", { class: "rule-copy" }, [
+                _cache[31] || (_cache[31] = _createElementVNode("div", { class: "rule-copy" }, [
                   _createElementVNode("strong", null, "只订阅已播缺集"),
                   _createElementVNode("span", null, "忽略 TMDB 中尚未播出的集数")
                 ], -1)),
@@ -405,8 +434,8 @@ const _sfc_main = /* @__PURE__ */ _defineComponent({
           ]),
           _createElementVNode("section", _hoisted_24, [
             _createElementVNode("div", _hoisted_25, [
-              _cache[31] || (_cache[31] = _createElementVNode("div", { class: "section-index" }, "03", -1)),
-              _cache[32] || (_cache[32] = _createElementVNode("div", null, [
+              _cache[34] || (_cache[34] = _createElementVNode("div", { class: "section-index" }, "03", -1)),
+              _cache[35] || (_cache[35] = _createElementVNode("div", null, [
                 _createElementVNode("h2", null, "通知设置"),
                 _createElementVNode("p", null, "使用 MoviePilot 已配置的全局通知渠道，不会发送 Emby API Key。")
               ], -1)),
@@ -420,7 +449,7 @@ const _sfc_main = /* @__PURE__ */ _defineComponent({
                 disabled: !props.api,
                 onClick: testNotification
               }, {
-                default: _withCtx(() => [..._cache[30] || (_cache[30] = [
+                default: _withCtx(() => [..._cache[33] || (_cache[33] = [
                   _createTextVNode("测试推送", -1)
                 ])]),
                 _: 1
@@ -434,7 +463,7 @@ const _sfc_main = /* @__PURE__ */ _defineComponent({
                     size: "20"
                   })
                 ]),
-                _cache[33] || (_cache[33] = _createElementVNode("div", { class: "rule-copy" }, [
+                _cache[36] || (_cache[36] = _createElementVNode("div", { class: "rule-copy" }, [
                   _createElementVNode("strong", null, "启用通知"),
                   _createElementVNode("span", null, "允许扫描结果发送到全局通知渠道")
                 ], -1)),
@@ -453,7 +482,7 @@ const _sfc_main = /* @__PURE__ */ _defineComponent({
                     size: "20"
                   })
                 ]),
-                _cache[34] || (_cache[34] = _createElementVNode("div", { class: "rule-copy" }, [
+                _cache[37] || (_cache[37] = _createElementVNode("div", { class: "rule-copy" }, [
                   _createElementVNode("strong", null, "扫描完成汇总"),
                   _createElementVNode("span", null, "扫描有变化或失败时发送结果")
                 ], -1)),
@@ -473,7 +502,7 @@ const _sfc_main = /* @__PURE__ */ _defineComponent({
                     size: "20"
                   })
                 ]),
-                _cache[35] || (_cache[35] = _createElementVNode("div", { class: "rule-copy" }, [
+                _cache[38] || (_cache[38] = _createElementVNode("div", { class: "rule-copy" }, [
                   _createElementVNode("strong", null, "新建订阅提醒"),
                   _createElementVNode("span", null, "列出本次新创建的剧集和缺集")
                 ], -1)),
@@ -493,7 +522,7 @@ const _sfc_main = /* @__PURE__ */ _defineComponent({
                     size: "20"
                   })
                 ]),
-                _cache[36] || (_cache[36] = _createElementVNode("div", { class: "rule-copy" }, [
+                _cache[39] || (_cache[39] = _createElementVNode("div", { class: "rule-copy" }, [
                   _createElementVNode("strong", null, "复用订阅提醒"),
                   _createElementVNode("span", null, "列出已经存在的订阅")
                 ], -1)),
@@ -513,7 +542,7 @@ const _sfc_main = /* @__PURE__ */ _defineComponent({
                     size: "20"
                   })
                 ]),
-                _cache[37] || (_cache[37] = _createElementVNode("div", { class: "rule-copy" }, [
+                _cache[40] || (_cache[40] = _createElementVNode("div", { class: "rule-copy" }, [
                   _createElementVNode("strong", null, "失败提醒"),
                   _createElementVNode("span", null, "列出创建订阅失败的剧集和原因")
                 ], -1)),
@@ -533,7 +562,7 @@ const _sfc_main = /* @__PURE__ */ _defineComponent({
                     size: "20"
                   })
                 ]),
-                _cache[38] || (_cache[38] = _createElementVNode("div", { class: "rule-copy" }, [
+                _cache[41] || (_cache[41] = _createElementVNode("div", { class: "rule-copy" }, [
                   _createElementVNode("strong", null, "开始扫描提醒"),
                   _createElementVNode("span", null, "扫描开始时先发送一条提示")
                 ], -1)),
@@ -566,7 +595,7 @@ const _sfc_main = /* @__PURE__ */ _defineComponent({
                   size: "24"
                 })
               ]),
-              _cache[39] || (_cache[39] = _createElementVNode("div", null, [
+              _cache[42] || (_cache[42] = _createElementVNode("div", null, [
                 _createElementVNode("h2", null, "立即扫描媒体库"),
                 _createElementVNode("p", null, "提交后在后台读取 Emby，全量检查缺集并创建订阅，不会重复创建已有订阅。")
               ], -1))
@@ -579,7 +608,7 @@ const _sfc_main = /* @__PURE__ */ _defineComponent({
               disabled: !ready.value,
               onClick: scanNow
             }, {
-              default: _withCtx(() => [..._cache[40] || (_cache[40] = [
+              default: _withCtx(() => [..._cache[43] || (_cache[43] = [
                 _createTextVNode("立即扫描", -1)
               ])]),
               _: 1
@@ -587,7 +616,7 @@ const _sfc_main = /* @__PURE__ */ _defineComponent({
           ]),
           _createElementVNode("section", _hoisted_42, [
             _createElementVNode("div", _hoisted_43, [
-              _cache[41] || (_cache[41] = _createElementVNode("div", { class: "section-head section-head--inline" }, [
+              _cache[44] || (_cache[44] = _createElementVNode("div", { class: "section-head section-head--inline" }, [
                 _createElementVNode("div", { class: "section-index" }, "04"),
                 _createElementVNode("div", null, [
                   _createElementVNode("h2", null, "订阅历史"),
@@ -598,8 +627,8 @@ const _sfc_main = /* @__PURE__ */ _defineComponent({
                 icon: "mdi-refresh",
                 variant: "text",
                 "aria-label": "刷新订阅历史",
-                loading: scanning.value,
-                onClick: loadSummary
+                loading: historyLoading.value,
+                onClick: _cache[17] || (_cache[17] = ($event) => loadSummary(historyPage.value, historyPageSize.value))
               }, null, 8, ["loading"])
             ]),
             !history.value.length ? (_openBlock(), _createElementBlock("div", _hoisted_44, [
@@ -607,7 +636,7 @@ const _sfc_main = /* @__PURE__ */ _defineComponent({
                 icon: "mdi-filmstrip-off",
                 size: "30"
               }),
-              _cache[42] || (_cache[42] = _createElementVNode("span", null, "扫描后，订阅记录会显示在这里", -1))
+              _cache[45] || (_cache[45] = _createElementVNode("span", null, "扫描后，订阅记录会显示在这里", -1))
             ])) : (_openBlock(), _createElementBlock("div", _hoisted_45, [
               (_openBlock(true), _createElementBlock(_Fragment, null, _renderList(history.value, (item) => {
                 return _openBlock(), _createElementBlock("article", {
@@ -646,16 +675,38 @@ const _sfc_main = /* @__PURE__ */ _defineComponent({
                   ])
                 ]);
               }), 128))
-            ]))
+            ])),
+            historyTotal.value ? (_openBlock(), _createElementBlock("div", _hoisted_51, [
+              _createElementVNode("span", _hoisted_52, "共 " + _toDisplayString(historyTotal.value) + " 条", 1),
+              _createVNode(_component_VPagination, {
+                modelValue: historyPage.value,
+                "onUpdate:modelValue": _cache[18] || (_cache[18] = ($event) => historyPage.value = $event),
+                length: historyTotalPages.value,
+                "total-visible": 5,
+                density: "comfortable",
+                class: "history-pages",
+                disabled: historyLoading.value
+              }, null, 8, ["modelValue", "length", "disabled"]),
+              _createVNode(_component_VSelect, {
+                modelValue: historyPageSize.value,
+                "onUpdate:modelValue": _cache[19] || (_cache[19] = ($event) => historyPageSize.value = $event),
+                items: historyPageSizeOptions,
+                label: "每页",
+                density: "compact",
+                "hide-details": "",
+                class: "history-page-size",
+                disabled: historyLoading.value
+              }, null, 8, ["modelValue", "disabled"])
+            ])) : _createCommentVNode("", true)
           ])
         ], 32),
-        _createElementVNode("footer", _hoisted_51, [
+        _createElementVNode("footer", _hoisted_53, [
           _createVNode(_component_VBtn, {
             variant: "text",
             "prepend-icon": "mdi-close",
-            onClick: _cache[17] || (_cache[17] = ($event) => emit("close"))
+            onClick: _cache[20] || (_cache[20] = ($event) => emit("close"))
           }, {
-            default: _withCtx(() => [..._cache[43] || (_cache[43] = [
+            default: _withCtx(() => [..._cache[46] || (_cache[46] = [
               _createTextVNode("取消", -1)
             ])]),
             _: 1
@@ -669,7 +720,7 @@ const _sfc_main = /* @__PURE__ */ _defineComponent({
             type: "submit",
             form: "missing-form"
           }, {
-            default: _withCtx(() => [..._cache[44] || (_cache[44] = [
+            default: _withCtx(() => [..._cache[47] || (_cache[47] = [
               _createTextVNode("保存配置", -1)
             ])]),
             _: 1
@@ -688,6 +739,6 @@ const _export_sfc = (sfc, props) => {
   return target;
 };
 
-const Config = /* @__PURE__ */ _export_sfc(_sfc_main, [["__scopeId", "data-v-03249ec7"]]);
+const Config = /* @__PURE__ */ _export_sfc(_sfc_main, [["__scopeId", "data-v-8df9db91"]]);
 
 export { _export_sfc as _, Config as default };
