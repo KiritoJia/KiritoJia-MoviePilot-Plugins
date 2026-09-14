@@ -1,5 +1,5 @@
 import { importShared } from './__federation_fn_import-JrT3xvdd.js';
-import Config, { _ as _export_sfc } from './__federation_expose_Config-lfYKwtEM.js';
+import Config, { _ as _export_sfc } from './__federation_expose_Config-G9R_33gm.js';
 
 const {defineComponent:_defineComponent} = await importShared('vue');
 

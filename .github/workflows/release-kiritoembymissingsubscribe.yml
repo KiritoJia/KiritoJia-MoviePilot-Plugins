@@ -18,7 +18,7 @@ jobs:
   release:
     runs-on: ubuntu-latest
     env:
-      VERSION: 1.0.10
+      VERSION: 1.0.11
       PLUGIN_DIR: plugins.v2/kiritoembymissingsubscribe
     steps:
       - uses: actions/checkout@v5
@@ -53,6 +53,6 @@ jobs:
           else
             gh release create "$TAG" "$ASSET" \
               --title "KiritoEmbyMissingSubscribe v${VERSION}" \
-              --notes "修复点击插件主页时 Pascal 命名联邦入口构建错误，按字幕下载助手方式提供独立 AppPage 入口。" \
+              --notes "新增扫描开始、完成汇总、新建订阅、复用订阅和失败通知，支持测试推送与通知去重。" \
               --latest
           fi
