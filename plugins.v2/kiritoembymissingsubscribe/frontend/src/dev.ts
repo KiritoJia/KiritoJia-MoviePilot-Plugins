@@ -5,9 +5,9 @@ import * as directives from 'vuetify/directives'
 import 'vuetify/styles'
 import '@mdi/font/css/materialdesignicons.css'
 
-import Config from './components/Config.vue'
+import AppPage from './components/AppPage.vue'
 
-const app = createApp(Config, {
+const app = createApp(AppPage, {
   initialConfig: {
     plugin_id: 'KiritoEmbyMissingSubscribe',
     enabled: true,
@@ -19,7 +19,16 @@ const app = createApp(Config, {
     timeout: 20,
   },
   api: {
-    get: async () => ({
+    get: async (path: string) => path.endsWith('/config') ? ({
+      plugin_id: 'KiritoEmbyMissingSubscribe',
+      enabled: true,
+      emby_url: 'http://192.168.31.20:8096',
+      user_id: '1472c63c9cfd1353dc8014d913fdcafa',
+      api_key: 'configured-api-key',
+      cron: '0 */6 * * *',
+      aired_only: true,
+      timeout: 20,
+    }) : ({
       success: true,
       finished_at: '2026-09-12 23:46:08',
       series: 428,
@@ -41,6 +50,7 @@ const app = createApp(Config, {
         },
       ],
     }),
+    post: async (_path: string, payload: unknown) => payload,
   },
 })
 

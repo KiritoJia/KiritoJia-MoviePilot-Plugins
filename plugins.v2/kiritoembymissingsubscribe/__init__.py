@@ -13,6 +13,7 @@ from urllib.parse import urlencode
 import requests
 from apscheduler.triggers.cron import CronTrigger
 from apscheduler.triggers.date import DateTrigger
+from fastapi import Request
 
 try:
     from app.chain.subscribe.facade import SubscribeChain
@@ -32,7 +33,7 @@ class KiritoEmbyMissingSubscribe(_PluginBase):
     plugin_name = "Kirito Emby缺集自动订阅"
     plugin_desc = "扫描 Emby 媒体库，发现已播缺集后自动创建 MoviePilot 订阅"
     plugin_icon = "https://raw.githubusercontent.com/KiritoJia/KiritoJia-MoviePilot-Plugins/main/icons/KiritoEmbyMissingSubscribe.svg"
-    plugin_version = "1.0.7"
+    plugin_version = "1.0.9"
     plugin_author = "KiritoJia"
     author_url = "https://github.com/KiritoJia/KiritoJia-MoviePilot-Plugins"
     plugin_config_prefix = "kiritoembymissingsubscribe_"
@@ -84,12 +85,39 @@ class KiritoEmbyMissingSubscribe(_PluginBase):
             "path": "/scan",
             "endpoint": self.scan_library,
             "methods": ["GET"],
+            "auth": "bear",
             "summary": "立即扫描 Emby 缺集",
         }, {
             "path": "/summary",
             "endpoint": self.get_summary,
             "methods": ["GET"],
+            "auth": "bear",
             "summary": "获取 Emby 缺集扫描状态",
+        }, {
+            "path": "/config",
+            "endpoint": self.get_frontend_config,
+            "methods": ["GET"],
+            "auth": "bear",
+            "summary": "获取 Emby 缺集订阅配置",
+        }, {
+            "path": "/config",
+            "endpoint": self.save_frontend_config,
+            "methods": ["POST"],
+            "auth": "bear",
+            "summary": "保存 Emby 缺集订阅配置",
+        }]
+
+    def get_sidebar_nav(self) -> list[dict[str, Any]]:
+        """注册主界面全页入口，使用前端 AppPage 组件。"""
+        if not self.get_state():
+            return []
+        return [{
+            "nav_key": "main",
+            "title": "Emby缺集订阅",
+            "icon": "mdi-television-guide",
+            "section": "subscribe",
+            "permission": "manage",
+            "order": 46,
         }]
 
     def get_render_mode(self) -> tuple[str, str]:
@@ -108,6 +136,33 @@ class KiritoEmbyMissingSubscribe(_PluginBase):
             "aired_only": self._aired_only,
             "timeout": self._timeout,
         }
+
+    def get_frontend_config(self) -> dict[str, Any]:
+        """返回全页 Vue 入口所需的配置。"""
+        return {
+            "plugin_id": self.__class__.__name__,
+            "enabled": self._enabled,
+            "onlyonce": self._onlyonce,
+            "emby_url": self._emby_url,
+            "user_id": self._user_id,
+            "api_key": self._api_key,
+            "cron": self._cron,
+            "aired_only": self._aired_only,
+            "timeout": self._timeout,
+        }
+
+    async def save_frontend_config(self, request: Request) -> dict[str, Any]:
+        """接收全页 Vue 入口保存的配置并重新装载插件。"""
+        incoming = await request.json()
+        if not isinstance(incoming, dict):
+            incoming = {}
+        current = self.get_frontend_config()
+        current.update({key: value for key, value in incoming.items() if key in {
+            "enabled", "onlyonce", "emby_url", "user_id", "api_key", "cron", "aired_only", "timeout",
+        }})
+        self.update_config(current)
+        self.init_plugin(current)
+        return {"success": True, "message": "配置已保存", **self.get_frontend_config()}
 
     def get_summary(self) -> dict[str, Any]:
         if not self._last_summary:

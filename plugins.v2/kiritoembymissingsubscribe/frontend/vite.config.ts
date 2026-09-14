@@ -25,7 +25,11 @@ export default defineConfig({
     federation({
       name: 'KiritoEmbyMissingSubscribe',
       filename: 'remoteEntry.js',
-      exposes: {'./Config': './src/components/Config.vue'},
+      exposes: {
+        './AppPage': './src/components/AppPage.vue',
+        './AppPageKiritoEmbyMissingSubscribe': './src/components/AppPage.vue',
+        './Config': './src/components/Config.vue',
+      },
       shared: {
         vue: { requiredVersion: false, generate: false, singleton: true },
         vuetify: { requiredVersion: false, generate: false, singleton: true },

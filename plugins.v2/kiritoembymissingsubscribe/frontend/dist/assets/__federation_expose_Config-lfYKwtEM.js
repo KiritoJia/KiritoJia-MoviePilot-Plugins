@@ -484,4 +484,4 @@ const _export_sfc = (sfc, props) => {
 
 const Config = /* @__PURE__ */ _export_sfc(_sfc_main, [["__scopeId", "data-v-e06a3a85"]]);
 
-export { Config as default };
+export { _export_sfc as _, Config as default };
