@@ -64,6 +64,23 @@ class PanSouClient:
         else:
             self._proxies = None
 
+    def _post(self, url: str, **kwargs: Any) -> requests.Response:
+        """代理 TLS 异常时对同一自定义地址进行直连重试。"""
+        try:
+            return requests.post(url, proxies=self._proxies, **kwargs)
+        except (requests.exceptions.SSLError, requests.exceptions.ProxyError,
+                requests.exceptions.ConnectionError) as exc:
+            if not self._proxies:
+                raise
+            logger.warning(f"PanSou 代理请求失败，尝试直连 {url}：{exc}")
+            # trust_env=False prevents HTTP(S)_PROXY from being re-applied.
+            session = requests.Session()
+            session.trust_env = False
+            try:
+                return session.post(url, proxies={}, **kwargs)
+            finally:
+                session.close()
+
     @staticmethod
     def _normalize_for_match(text: str) -> str:
         """
@@ -139,11 +156,10 @@ class PanSouClient:
         try:
             login_url = f"{self.base_url}/api/auth/login"
             self._api_call_count += 1
-            response = requests.post(
+            response = self._post(
                 login_url,
                 json={"username": self.username, "password": self.password},
                 timeout=10,
-                proxies=self._proxies
             )
 
             if response.status_code == 200:
@@ -227,7 +243,7 @@ class PanSouClient:
 
             logger.info(f"PanSou 搜索: {payload}")
             self._api_call_count += 1
-            response = requests.post(search_url, json=payload, headers=headers, timeout=120, proxies=self._proxies)
+            response = self._post(search_url, json=payload, headers=headers, timeout=120)
           
 
             # Token 失效重试
@@ -239,7 +255,7 @@ class PanSouClient:
                 if token:
                     headers["Authorization"] = f"Bearer {token}"
                     self._api_call_count += 1
-                    response = requests.post(search_url, json=payload, headers=headers, timeout=30, proxies=self._proxies)
+                    response = self._post(search_url, json=payload, headers=headers, timeout=30)
 
             if response.status_code != 200:
                 return {

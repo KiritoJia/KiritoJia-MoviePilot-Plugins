@@ -16,7 +16,7 @@ jobs:
   release:
     runs-on: ubuntu-latest
     env:
-      VERSION: 1.5.12
+      VERSION: 1.5.13
       PLUGIN_DIR: plugins.v2/kiritop115strgmsub
     steps:
       - uses: actions/checkout@v5
@@ -37,5 +37,5 @@ jobs:
         run: |
           gh release create "KiritoP115StrgmSub_v${VERSION}" "kiritop115strgmsub_v${VERSION}.zip" \
             --title "KiritoP115StrgmSub v${VERSION}" \
-            --notes "修复 PanSou 自定义地址保存后被启动逻辑清空的问题。" \
+            --notes "保留自定义 PanSou 地址，代理访问 TLS 失败时自动直连重试，兼容 ps.ugnas.xyz:998。" \
             --latest

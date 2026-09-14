@@ -41,7 +41,7 @@ class KiritoP115StrgmSub(_PluginBase):
     # 插件图标
     plugin_icon = "https://raw.githubusercontent.com/KiritoJia/KiritoJia-MoviePilot-Plugins/main/icons/P115StrgmSub.png"
     # 插件版本
-    plugin_version = "1.5.12"
+    plugin_version = "1.5.13"
     # 插件作者
     plugin_author = "KiritoJia"
     # 作者主页
