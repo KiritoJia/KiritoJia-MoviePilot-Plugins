@@ -18,7 +18,7 @@ jobs:
   release:
     runs-on: ubuntu-latest
     env:
-      VERSION: 1.0.15
+      VERSION: 1.0.16
       PLUGIN_DIR: plugins.v2/kiritoembymissingsubscribe
     steps:
       - uses: actions/checkout@v5
@@ -55,6 +55,6 @@ jobs:
           else
             gh release create "$TAG" "$ASSET" \
               --title "KiritoEmbyMissingSubscribe v${VERSION}" \
-              --notes "按 115 网盘订阅追更插件方式补充新建订阅和复用订阅通知，避免订阅成功后无提醒。" \
+              --notes "每次扫描完成都发送结果通知，无新订阅时也明确提醒扫描无变化。" \
               --latest
           fi

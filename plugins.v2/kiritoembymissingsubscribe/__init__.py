@@ -3,7 +3,6 @@
 from __future__ import annotations
 
 import json
-import hashlib
 import inspect
 from datetime import date, datetime, timedelta
 from pathlib import Path
@@ -35,7 +34,7 @@ class KiritoEmbyMissingSubscribe(_PluginBase):
     plugin_name = "Kirito Emby缺集自动订阅"
     plugin_desc = "扫描 Emby 媒体库，发现已播缺集后自动创建 MoviePilot 订阅"
     plugin_icon = "https://raw.githubusercontent.com/KiritoJia/KiritoJia-MoviePilot-Plugins/main/icons/KiritoEmbyMissingSubscribe.svg"
-    plugin_version = "1.0.15"
+    plugin_version = "1.0.16"
     plugin_author = "KiritoJia"
     author_url = "https://github.com/KiritoJia/KiritoJia-MoviePilot-Plugins"
     plugin_config_prefix = "kiritoembymissingsubscribe_"
@@ -58,7 +57,6 @@ class KiritoEmbyMissingSubscribe(_PluginBase):
         self._notify_new = True
         self._notify_existing = False
         self._notify_failure = True
-        self._notify_only_changes = True
         self._last_summary: dict[str, Any] = {}
         self._scan_lock = Lock()
         self._state_file = self.get_data_path() / "scan_state.json"
@@ -79,7 +77,6 @@ class KiritoEmbyMissingSubscribe(_PluginBase):
         self._notify_new = bool(config.get("notify_new", True))
         self._notify_existing = bool(config.get("notify_existing", False))
         self._notify_failure = bool(config.get("notify_failure", True))
-        self._notify_only_changes = bool(config.get("notify_only_changes", True))
         try:
             self._timeout = max(5, min(120, int(config.get("timeout", 20))))
         except (TypeError, ValueError):
@@ -163,7 +160,6 @@ class KiritoEmbyMissingSubscribe(_PluginBase):
             "notify_new": self._notify_new,
             "notify_existing": self._notify_existing,
             "notify_failure": self._notify_failure,
-            "notify_only_changes": self._notify_only_changes,
         }
 
     def get_frontend_config(self) -> dict[str, Any]:
@@ -184,7 +180,6 @@ class KiritoEmbyMissingSubscribe(_PluginBase):
             "notify_new": self._notify_new,
             "notify_existing": self._notify_existing,
             "notify_failure": self._notify_failure,
-            "notify_only_changes": self._notify_only_changes,
         }
 
     async def save_frontend_config(self, request: Request) -> dict[str, Any]:
@@ -196,7 +191,7 @@ class KiritoEmbyMissingSubscribe(_PluginBase):
         current.update({key: value for key, value in incoming.items() if key in {
             "enabled", "onlyonce", "emby_url", "user_id", "api_key", "cron", "aired_only", "timeout",
             "notify_enabled", "notify_on_start", "notify_on_complete", "notify_new", "notify_existing",
-            "notify_failure", "notify_only_changes",
+            "notify_failure",
         }})
         self.update_config(current)
         self.init_plugin(current)
@@ -318,7 +313,6 @@ class KiritoEmbyMissingSubscribe(_PluginBase):
                 "new_subscriptions": [],
                 "existing_subscription_details": [],
                 "failure_details": [],
-                "notification_fingerprints": list(self._last_summary.get("notification_fingerprints", []))[-100:],
             }
             for series in series_items:
                 try:
@@ -452,7 +446,6 @@ class KiritoEmbyMissingSubscribe(_PluginBase):
         new_items = summary.get("new_subscriptions", []) if self._notify_new else []
         existing_items = summary.get("existing_subscription_details", []) if self._notify_existing else []
         failures = summary.get("failure_details", []) if self._notify_failure else []
-        has_changes = bool(new_items or existing_items or failures)
         if not self._notify_on_complete:
             if failures:
                 failure_text = "\n".join(
@@ -460,15 +453,8 @@ class KiritoEmbyMissingSubscribe(_PluginBase):
                     for item in failures
                 )
                 text = "本次扫描有订阅创建失败：\n" + failure_text
-                fingerprint = self._notification_fingerprint("failure", text)
-                if fingerprint not in summary.get("notification_fingerprints", []) and self._send_notification(
-                    "【Emby缺集自动订阅】订阅失败", text
-                ):
-                    self._remember_notification(summary, fingerprint)
+                self._send_notification("【Emby缺集自动订阅】订阅失败", text)
             return
-        if self._notify_only_changes and not has_changes:
-            return
-
         sections = [
             f"扫描完成：剧集 {summary.get('series', 0)} 部，发现缺集 {summary.get('missing', 0)} 集。",
             f"新增订阅 {summary.get('subscriptions', 0)} 个，复用订阅 {summary.get('existing_subscriptions', 0)} 个，失败 {summary.get('subscribe_failures', 0)} 个。",
@@ -482,12 +468,10 @@ class KiritoEmbyMissingSubscribe(_PluginBase):
                 f"- {item.get('name', '未知剧集')} S{int(item.get('season', 0)):02d}：{item.get('error', '未知错误')}"
                 for item in failures
             ))
+        if not new_items and not existing_items and not failures:
+            sections.append("\n本次扫描未发现新的缺集订阅，订阅状态无变化。")
         text = "\n".join(sections)
-        fingerprint = self._notification_fingerprint("scan", text)
-        if fingerprint in summary.get("notification_fingerprints", []):
-            return
-        if self._send_notification("【Emby缺集自动订阅】扫描结果", text):
-            self._remember_notification(summary, fingerprint)
+        self._send_notification("【Emby缺集自动订阅】执行完成", text)
 
     @staticmethod
     def _format_subscription_details(items: list[dict[str, Any]]) -> str:
@@ -500,19 +484,6 @@ class KiritoEmbyMissingSubscribe(_PluginBase):
     def _format_missing(missing: Any) -> str:
         values = missing if isinstance(missing, list) else []
         return "、".join(f"E{int(value):02d}" for value in values) or "缺集信息未知"
-
-    @staticmethod
-    def _notification_fingerprint(kind: str, text: str) -> str:
-        return hashlib.sha256(f"{kind}\n{text}".encode("utf-8")).hexdigest()
-
-    @staticmethod
-    def _remember_notification(summary: dict[str, Any], fingerprint: str) -> bool:
-        fingerprints = summary.setdefault("notification_fingerprints", [])
-        if fingerprint in fingerprints:
-            return False
-        fingerprints.append(fingerprint)
-        del fingerprints[:-100]
-        return True
 
     def _send_notification(self, title: str, text: str) -> bool:
         try:
@@ -646,5 +617,4 @@ class KiritoEmbyMissingSubscribe(_PluginBase):
             "notify_new": self._notify_new,
             "notify_existing": self._notify_existing,
             "notify_failure": self._notify_failure,
-            "notify_only_changes": self._notify_only_changes,
         })

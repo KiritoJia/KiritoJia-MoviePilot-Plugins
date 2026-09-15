@@ -13,7 +13,7 @@ interface ConfigModel {
   enabled?: boolean; onlyonce?: boolean; emby_url?: string; user_id?: string; api_key?: string
   cron?: string; aired_only?: boolean; timeout?: number; plugin_id?: string; last_summary?: Summary
   notify_enabled?: boolean; notify_on_start?: boolean; notify_on_complete?: boolean; notify_new?: boolean
-  notify_existing?: boolean; notify_failure?: boolean; notify_only_changes?: boolean
+  notify_existing?: boolean; notify_failure?: boolean
   [key: string]: unknown
 }
 interface Toast { success(message: string): unknown; error(message: string): unknown; info(message: string): unknown }
@@ -24,7 +24,7 @@ const toast = inject<Toast | null>('moviepilot:toast', null)
 const form = ref({
   enabled: false, onlyonce: false, emby_url: '', user_id: '', api_key: '', cron: '0 */6 * * *', aired_only: true, timeout: 20,
   notify_enabled: true, notify_on_start: false, notify_on_complete: true, notify_new: true,
-  notify_existing: false, notify_failure: true, notify_only_changes: true,
+  notify_existing: false, notify_failure: true,
 })
 const saving = ref(false)
 const scanning = ref(false)
@@ -69,7 +69,6 @@ function applyConfig(value?: ConfigModel): void {
     notify_enabled: initial.notify_enabled !== false, notify_on_start: Boolean(initial.notify_on_start),
     notify_on_complete: initial.notify_on_complete !== false, notify_new: initial.notify_new !== false,
     notify_existing: Boolean(initial.notify_existing), notify_failure: initial.notify_failure !== false,
-    notify_only_changes: initial.notify_only_changes !== false,
   }
   summary.value = initial.last_summary || null
   historyPage.value = Number(initial.last_summary?.subscription_history_page || 1)
@@ -174,13 +173,12 @@ function setMessage(text: string, type: 'success' | 'error' | 'info'): void {
         <div class="section-head"><div class="section-index">03</div><div><h2>通知设置</h2><p>使用 MoviePilot 已配置的全局通知渠道，不会发送 Emby API Key。</p></div><VBtn class="test-notify" color="primary" variant="tonal" size="small" prepend-icon="mdi-bell-check-outline" :loading="testingNotify" :disabled="!props.api" @click="testNotification">测试推送</VBtn></div>
         <div class="rule-grid notification-grid">
           <div class="rule-row"><div class="rule-icon"><VIcon icon="mdi-bell-outline" size="20" /></div><div class="rule-copy"><strong>启用通知</strong><span>允许扫描结果发送到全局通知渠道</span></div><VSwitch v-model="form.notify_enabled" color="primary" hide-details inset /></div>
-          <div class="rule-row"><div class="rule-icon"><VIcon icon="mdi-clipboard-check-outline" size="20" /></div><div class="rule-copy"><strong>扫描完成汇总</strong><span>扫描有变化或失败时发送结果</span></div><VSwitch v-model="form.notify_on_complete" color="primary" hide-details inset :disabled="!form.notify_enabled" /></div>
+          <div class="rule-row"><div class="rule-icon"><VIcon icon="mdi-clipboard-check-outline" size="20" /></div><div class="rule-copy"><strong>扫描完成汇总</strong><span>每次扫描结束都发送结果，无变化也会提醒</span></div><VSwitch v-model="form.notify_on_complete" color="primary" hide-details inset :disabled="!form.notify_enabled" /></div>
           <div class="rule-row"><div class="rule-icon"><VIcon icon="mdi-plus-box-outline" size="20" /></div><div class="rule-copy"><strong>新建订阅提醒</strong><span>列出本次新创建的剧集和缺集</span></div><VSwitch v-model="form.notify_new" color="primary" hide-details inset :disabled="!form.notify_enabled" /></div>
           <div class="rule-row"><div class="rule-icon"><VIcon icon="mdi-sync-circle-outline" size="20" /></div><div class="rule-copy"><strong>复用订阅提醒</strong><span>列出已经存在的订阅</span></div><VSwitch v-model="form.notify_existing" color="primary" hide-details inset :disabled="!form.notify_enabled" /></div>
           <div class="rule-row"><div class="rule-icon"><VIcon icon="mdi-alert-circle-outline" size="20" /></div><div class="rule-copy"><strong>失败提醒</strong><span>列出创建订阅失败的剧集和原因</span></div><VSwitch v-model="form.notify_failure" color="primary" hide-details inset :disabled="!form.notify_enabled" /></div>
           <div class="rule-row"><div class="rule-icon"><VIcon icon="mdi-radar" size="20" /></div><div class="rule-copy"><strong>开始扫描提醒</strong><span>扫描开始时先发送一条提示</span></div><VSwitch v-model="form.notify_on_start" color="primary" hide-details inset :disabled="!form.notify_enabled" /></div>
         </div>
-        <VSwitch v-model="form.notify_only_changes" color="primary" class="changes-switch" label="仅在有新订阅、失败或其他变化时发送汇总" hide-details inset :disabled="!form.notify_enabled || !form.notify_on_complete" />
       </section>
 
       <section class="action-panel"><div class="action-copy"><div class="action-icon"><VIcon icon="mdi-play-circle-outline" size="24" /></div><div><h2>立即扫描媒体库</h2><p>提交后在后台读取 Emby，全量检查缺集并创建订阅，不会重复创建已有订阅。</p></div></div><VBtn color="primary" variant="flat" prepend-icon="mdi-play" :loading="scanning" :disabled="!ready" @click="scanNow">立即扫描</VBtn></section>
